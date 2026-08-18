@@ -4,7 +4,7 @@
 
 The project is intended for personal use on macOS 26 or later. All speech recognition and translation should run locally after the required models have been downloaded.
 
-> **Project status:** Planning and initial scaffolding. No working executable exists yet.
+> **Project status:** Architecture and pre-scaffolding. No working executable exists yet.
 
 ## Goals
 
@@ -70,27 +70,54 @@ Future output modes may include JSON Lines for integration with other programs a
 
 ## Architecture
 
+`bfish` will be a native Swift package built around a reusable `BFishCore` library. The terminal executable will be the first client of that library; a future SwiftUI application should use the same capture, recognition, segmentation, translation, and formatting components without moving their implementation into the UI target.
+
+The architecture separates four concerns:
+
+1. Acquiring audio from a file, an input device, the entire system, or a selected process.
+2. Converting continuous audio into stable speech utterances.
+3. Transcribing each utterance in its source language with WhisperKit.
+4. Translating finalized source text to English with Ollama and presenting both forms.
+
+### Live data flow
+
 The planned live pipeline is:
+
+```text
+Audio file, input device, system audio, or selected application
+                              ↓
+                         Audio source
+                              ↓
+                 PCM normalization/resampling
+                              ↓
+              Voice activity and rolling buffer
+                              ↓
+          Overlapping utterance segmentation queue
+                              ↓
+             WhisperKit source transcription
+                              ↓
+       Boundary deduplication and sentence assembly
+                              ↓
+       Ollama translation with bounded recent context
+                              ↓
+          Timestamp + language + source + English
+```
+
+For an Audio Hijack workflow, the first portion becomes:
 
 ```text
 Application or microphone
         ↓
 Audio Hijack session
         ├──→ Speakers or headphones
-        └──→ Virtual audio device
-                    ↓
-              bfish capture
-                    ↓
-       Resample to model input format
-                    ↓
-        Speech detection and chunking
-                    ↓
-      WhisperKit source transcription
-                    ↓
-         Ollama English translation
-                    ↓
-       Source + English terminal output
+        └──→ Loopback or BlackHole virtual device
+                              ↓
+                    bfish device capture
 ```
+
+On macOS 26, `bfish` should also support direct system-wide or per-application capture through Apple's Core Audio process-tap APIs, with ScreenCaptureKit retained as an alternate backend if useful. This makes Audio Hijack optional for simple capture while preserving it for deliberate routing, mixing, channel selection, and audio processing.
+
+### Component boundaries
 
 The Swift package will separate reusable behavior from command-line presentation:
 
@@ -119,20 +146,70 @@ The main integration boundaries will be protocol-based so implementations can be
 protocol AudioCapturing
 protocol SpeechRecognizing
 protocol TextTranslating
+protocol SpeechSegmenting
+protocol TranscriptFormatting
 ```
 
 Initial implementations are expected to include:
 
 - `FileAudioSource`
+- `CoreAudioDeviceSource`
 - `WhisperKitRecognizer`
 - `OllamaTranslator`
+- `TerminalTranscriptFormatter`
 
 Later implementations should include:
 
-- `CoreAudioDeviceSource`
+- `CoreAudioSystemSource`
+- `CoreAudioProcessSource`
+- An optional `ScreenCaptureKitSource`
 - `WhisperDirectTranslator` as a benchmark and fallback
 
 This design allows a future SwiftUI target to consume `BFishCore` without moving or rewriting the transcription pipeline.
+
+### Package dependency direction
+
+Dependencies should point inward toward stable domain types:
+
+```text
+bfish CLI ───────────────┐
+                        ↓
+Future SwiftUI app → BFishCore pipeline
+                        ↑
+          ┌─────────────┼──────────────┐
+          │             │              │
+   Audio adapters  WhisperKit     Ollama client
+```
+
+`BFishCore` will own transcript segments, translations, configuration, pipeline state, and protocol definitions. Framework-specific types from WhisperKit, AVFoundation, Core Audio, or HTTP responses should be converted at adapter boundaries and should not leak through the public domain model.
+
+### Concurrency and backpressure
+
+Live capture must not block the real-time audio callback. Audio frames should be copied into a bounded buffer and processed by asynchronous workers outside the callback. The pipeline should have explicit limits for queued audio and pending translations.
+
+The initial policy should favor completeness during normal load. If inference falls substantially behind live audio, the pipeline should report the lag and use an explicit recovery policy instead of silently growing memory without bound. Any decision to skip stale audio must be visible in diagnostics.
+
+### Stable segmentation
+
+Fixed-duration chunks tend to cut words, repeat text, and create artificial punctuation. The planned segmenter will instead:
+
+1. Detect speech and meaningful pauses.
+2. Maintain a rolling audio buffer.
+3. Produce utterances with a small overlap at their boundaries.
+4. Remove duplicated text created by overlapping transcription.
+5. Assemble complete source-language sentences where possible.
+6. Send only finalized sentences to Ollama.
+
+An optional later streaming mode may re-transcribe the rolling tail and commit text only after consecutive decoding passes agree. Provisional text must be visually distinct and must never be treated as final translation context.
+
+### Error isolation
+
+Capture, transcription, and translation failures should be distinguishable:
+
+- A recoverable Ollama failure should preserve and print the source transcript.
+- A failed utterance should not necessarily terminate a healthy live capture session.
+- Audio-device removal should trigger a clear state transition and reconnection attempt or controlled shutdown.
+- `SIGINT` and `SIGTERM` should stop capture, drain or cancel bounded work, release audio resources, and leave terminal output valid.
 
 ## Speech Recognition
 
@@ -199,6 +276,21 @@ Application Source
 The `bfish` CLI will open the virtual device as an audio input. The preferred bridge is an existing Rogue Amoeba Loopback device when available; otherwise, [BlackHole](https://github.com/ExistentialAudio/BlackHole) is the planned open-source option.
 
 The virtual audio device is an external prerequisite and will not initially be bundled with `bfish`. This avoids building and maintaining a custom Core Audio driver and keeps third-party driver installation and licensing separate from this repository.
+
+Audio Hijack is one supported capture path, not a required runtime dependency. The planned capture modes are:
+
+```console
+# Audio Hijack, Loopback, BlackHole, microphone, or another input device
+bfish listen --device "BlackHole 2ch"
+
+# Direct macOS system-audio capture
+bfish listen --system
+
+# Direct capture of one application
+bfish listen --app com.apple.Safari
+```
+
+Direct capture is useful for simple sources and removes virtual-device setup. Audio Hijack remains preferable when the user wants to combine sources, apply effects, isolate channels, or maintain a reusable visual routing session.
 
 ## Planned CLI
 
@@ -285,6 +377,7 @@ Model files and generated caches should live outside the Git repository in Appli
 - Enumerate input devices.
 - Select devices by stable identifier.
 - Capture and resample audio.
+- Add direct system-wide and per-application capture.
 - Handle device changes and clean shutdown.
 
 ### 5. Segmentation and continuous translation
@@ -322,7 +415,20 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Inspect the development Mac for its Swift, Xcode, Ollama, installed Ollama models, and Core Audio devices. Then initialize the repository and build the audio-file proof of concept before adding live capture or SwiftUI.
+Scaffold the Swift package and implement `bfish doctor`, then build the audio-file proof of concept before adding live capture or SwiftUI. The current host is Apple Silicon on macOS 26.4.1 with Swift 6.3.1. Only the Command Line Tools developer directory is currently selected, so full Xcode availability and selection must be resolved before WhisperKit integration is validated. Ollama is installed, but its running service and installed model list still need to be checked outside the restricted development probe.
+
+## Related Projects and Prior Art
+
+The design intentionally draws on existing open-source work rather than treating this pipeline as novel:
+
+- [Live Translation](https://github.com/KazKozDev/live-translation) is the closest behavioral match: BlackHole audio, MLX Whisper, Ollama translation, VAD, overlap-aware segmentation, and bilingual output. It validates the workflow but uses Python and PyObjC rather than a reusable native Swift core.
+- [hark](https://github.com/PhantomYdn/hark) is the strongest native CLI reference. It demonstrates Swift system/per-process audio capture, WhisperKit integration, device and model management, stdout/stderr conventions, and clean signal handling.
+- [Parrot](https://github.com/turantekin/Parrot) demonstrates a larger native SwiftUI architecture using ScreenCaptureKit, AVAudioEngine, WhisperKit, and optional Ollama.
+- [Pindrop](https://github.com/watzon/pindrop) demonstrates a native WhisperKit application with model management and optional Ollama transcript processing.
+- [AudioCap](https://github.com/insidegui/AudioCap) provides focused sample code for Apple's Core Audio process-tap APIs.
+- [CoreAudioTapKit](https://github.com/CJStanfield/CoreAudioTapKit) packages process-tap and aggregate-device lifecycle management as a Swift library worth evaluating before implementing those mechanics directly.
+
+These projects are references and potential dependency candidates. Code should not be copied without reviewing its license, attribution requirements, API stability, and suitability for the narrower `bfish` architecture.
 
 ## References
 
@@ -332,3 +438,9 @@ Inspect the development Mac for its Swift, Xcode, Ollama, installed Ollama model
 - [Audio Hijack manual](https://www.rogueamoeba.com/support/manuals/audiohijack/)
 - [BlackHole virtual audio driver](https://github.com/ExistentialAudio/BlackHole)
 - [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+- [Live Translation](https://github.com/KazKozDev/live-translation)
+- [hark](https://github.com/PhantomYdn/hark)
+- [Parrot](https://github.com/turantekin/Parrot)
+- [Pindrop](https://github.com/watzon/pindrop)
+- [AudioCap](https://github.com/insidegui/AudioCap)
+- [CoreAudioTapKit](https://github.com/CJStanfield/CoreAudioTapKit)
