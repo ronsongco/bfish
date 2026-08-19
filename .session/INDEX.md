@@ -7,5 +7,6 @@ Build a local macOS process that captures audio, transcribes multilingual speech
 ---
 
 ## Session Log
+- [2026-08-18 16:36](2026-08-18_16-36.md) — **Goal:** Define offline LLM benchmarking and evaluate speaker diarization | scoreboard documented; speaker requirement pending
 - [2026-08-18 16:27](2026-08-18_16-27.md) — **Goal:** Research prior art and finalize the native Swift architecture | architecture complete; scaffolding not started
 - [2026-08-18 15:07](2026-08-18_15-07.md) — **Goal:** Plan the macOS audio transcription and English translation project | planning complete; implementation not started

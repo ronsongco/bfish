@@ -349,6 +349,114 @@ Model files and generated caches should live outside the Git repository in Appli
 - One failed segment should not necessarily terminate an otherwise healthy live session.
 - Stable device identifiers should be used internally even when the CLI accepts human-readable names.
 
+## Offline Translation Model Evaluation
+
+Choosing the Ollama model is a separate engineering workstream from choosing a WhisperKit model. Speech-recognition quality and translation quality must not be collapsed into one measurement because an incorrect transcript can make a capable translation model appear weak.
+
+The project will maintain a reproducible benchmark and scoreboard for local translation models. Candidate names, parameter sizes, and quantizations will remain data rather than being hard-coded into the application.
+
+### Benchmark tracks
+
+The evaluation suite will contain two tracks:
+
+1. **Translation-only:** Every model receives the same curated source text. This isolates the LLM's translation behavior from speech-recognition errors.
+2. **End-to-end:** Every model receives fixed WhisperKit transcripts containing realistic recognition mistakes, missing punctuation, partial words, and segmentation boundaries. This measures behavior in the actual `bfish` pipeline without rerunning WhisperKit for every model.
+
+Live audio timing will be evaluated separately after the text benchmark is stable.
+
+### Test corpus
+
+The corpus should be versioned and balanced across the primary and secondary languages. Each language should include:
+
+- Short conversational utterances
+- Longer podcast and interview turns
+- Multi-turn exchanges where pronouns or omitted subjects require recent context
+- Multiple-speaker turns with stable anonymous speaker IDs
+- Names, places, dates, money, percentages, measurements, and technical terminology
+- Informal speech, slang, hesitation, and incomplete sentences
+- Questions, negation, uncertainty, humor, and idiomatic language
+- Clean source text and paired ASR-degraded variants
+- Silence/empty-input cases that must not produce a translation
+
+Reference translations should be human-reviewed. Automated metrics may assist comparison, but they will not be treated as sufficient evidence of conversational translation quality.
+
+### Controlled execution
+
+Every scored run must record:
+
+- Host model, memory size, and macOS version
+- Ollama version
+- Exact model tag, parameter size, file size, and quantization
+- Prompt-template version
+- Temperature, context size, seed when supported, and keep-alive behavior
+- Cold-load and warm-run measurements
+- Whether WhisperKit or another major workload was running concurrently
+
+All models must receive the same prompt and structured-output schema unless the run is explicitly labeled as a model-specific prompt experiment. Each fixture should be run multiple times when the backend cannot guarantee deterministic output.
+
+### Scoring dimensions
+
+The scoreboard will report raw measurements and a weighted score. Scores must also be shown per language so strong performance in one language cannot hide poor performance in another.
+
+| Category | Weight | Measurements |
+|---|---:|---|
+| Meaning preservation | 25 | Human adequacy rating; omissions; reversals; mistranslations |
+| English quality | 10 | Fluency, grammar, and natural conversational phrasing |
+| Details and entities | 10 | Names, numbers, dates, units, terminology, and negation preserved |
+| Hallucination control | 10 | Invented content, commentary, and non-empty answers for empty input |
+| ASR robustness | 10 | Quality on noisy, incomplete, or poorly punctuated WhisperKit text |
+| Context and speakers | 5 | Correct use of bounded history without merging or reassigning speakers |
+| Structured-output reliability | 5 | Valid schema, unchanged source text, and no extra prose |
+| Warm translation latency | 10 | Median and 95th-percentile time per finalized utterance |
+| Resource use | 10 | Peak memory, model size, and contention with WhisperKit |
+| Startup behavior | 5 | Cold-load time and first-result latency |
+
+The overall score is useful for ranking, but model selection should consider two published views:
+
+- **Quality leader:** highest language-balanced translation quality regardless of resource cost.
+- **Live-use leader:** best model meeting the latency and memory budget on the target Mac.
+
+A model that fails mandatory checks—such as frequently producing invalid output, changing source text, or hallucinating on empty input—should be marked ineligible even if its aggregate score is high.
+
+### Benchmark artifacts
+
+The planned benchmark layout is:
+
+```text
+Benchmarks/
+├── Fixtures/
+│   ├── ja/
+│   ├── ko/
+│   ├── zh/
+│   ├── pt-BR/
+│   ├── tl/
+│   ├── es/
+│   └── it/
+├── Prompts/
+├── Runs/
+└── Scoreboards/
+```
+
+Fixture inputs and raw results should use JSON Lines so runs can be reproduced and re-scored. Each result must retain the source text, reference translation, model output, parsed structured response, timing, resource measurements, model metadata, and evaluator scores.
+
+The generated scoreboard should be available as both CSV and readable Markdown, including:
+
+- Overall and per-language scores
+- Translation-only and end-to-end results
+- Median and 95th-percentile latency
+- Peak memory and model disk size
+- Structured-output failure and hallucination rates
+- Test date, host, Ollama version, prompt version, and corpus revision
+
+Benchmark tooling should eventually be exposed through a command such as:
+
+```console
+bfish benchmark translation \
+  --models <model-a>,<model-b>,<model-c> \
+  --suite Benchmarks/Fixtures \
+  --output Benchmarks/Runs/<run-id>
+```
+
 ## Development Milestones
 
 ### 1. Project foundation
@@ -365,14 +473,23 @@ Model files and generated caches should live outside the Git repository in Appli
 - Translate the transcript through Ollama.
 - Print source text and English output with timing information.
 
-### 3. Language and model evaluation
+### 3. WhisperKit language evaluation
 
 - Assemble short, legally usable test fixtures for the priority languages.
-- Compare candidate WhisperKit and Ollama models.
-- Record latency, memory usage, detected language, transcript quality, and translation quality.
-- Select sensible defaults while preserving command-line overrides.
+- Compare candidate WhisperKit models independently of Ollama.
+- Record latency, memory usage, detected language, and transcript quality.
+- Select a speech-recognition default while preserving command-line overrides.
 
-### 4. Live Core Audio capture
+### 4. Offline LLM translation scoreboard
+
+- Build the versioned multilingual text and ASR-degraded fixture corpus.
+- Implement repeatable Ollama model runs and structured result capture.
+- Add deterministic checks and human-review fields.
+- Generate per-language, quality-leader, and live-use scoreboards.
+- Test WhisperKit and Ollama memory contention on the target hardware.
+- Select an initial Ollama default while preserving command-line overrides.
+
+### 5. Live Core Audio capture
 
 - Enumerate input devices.
 - Select devices by stable identifier.
@@ -380,7 +497,7 @@ Model files and generated caches should live outside the Git repository in Appli
 - Add direct system-wide and per-application capture.
 - Handle device changes and clean shutdown.
 
-### 5. Segmentation and continuous translation
+### 6. Segmentation and continuous translation
 
 - Detect speech and silence.
 - Maintain a rolling audio buffer.
@@ -388,14 +505,14 @@ Model files and generated caches should live outside the Git repository in Appli
 - Suppress duplicated transcription across chunks.
 - Supply bounded context to Ollama.
 
-### 6. Audio Hijack validation
+### 7. Audio Hijack validation
 
 - Document the Audio Hijack session setup.
 - Validate routing through Loopback or BlackHole.
 - Confirm simultaneous listening and translation.
 - Measure sustained latency and resource usage.
 
-### 7. Native macOS application
+### 8. Native macOS application
 
 - Add a SwiftUI target consuming `BFishCore`.
 - Provide device and model selection.
