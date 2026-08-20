@@ -4,14 +4,37 @@ public struct AudioTimeRange: Codable, Equatable, Sendable {
     public let start: TimeInterval
     public let end: TimeInterval
 
-    public init(start: TimeInterval, end: TimeInterval) {
-        precondition(start >= 0, "Audio start time must not be negative")
-        precondition(end >= start, "Audio end time must not precede start time")
+    public init(start: TimeInterval, end: TimeInterval) throws {
+        guard start.isFinite, end.isFinite else {
+            throw AudioTimeRangeError.nonFinite
+        }
+        guard start >= 0 else {
+            throw AudioTimeRangeError.negativeStart(start)
+        }
+        guard end >= start else {
+            throw AudioTimeRangeError.endPrecedesStart(start: start, end: end)
+        }
         self.start = start
         self.end = end
     }
 
     public var duration: TimeInterval { end - start }
+
+    private enum CodingKeys: String, CodingKey { case start, end }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        try self.init(
+            start: values.decode(TimeInterval.self, forKey: .start),
+            end: values.decode(TimeInterval.self, forKey: .end)
+        )
+    }
+}
+
+public enum AudioTimeRangeError: Error, Equatable, Sendable {
+    case nonFinite
+    case negativeStart(TimeInterval)
+    case endPrecedesStart(start: TimeInterval, end: TimeInterval)
 }
 
 public struct SpeakerID: RawRepresentable, Codable, Hashable, Sendable, CustomStringConvertible {

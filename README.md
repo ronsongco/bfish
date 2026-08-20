@@ -219,9 +219,11 @@ Future SwiftUI app → BFishCore pipeline
 
 ### Concurrency and backpressure
 
-Live capture must not block the real-time audio callback. Audio frames should be copied into a bounded buffer and processed by asynchronous workers outside the callback. The pipeline should have explicit limits for queued audio and pending translations.
+Live capture must not block the real-time audio callback. The callback writes into a preallocated ring buffer; owned Swift audio chunks are materialized only by a consumer task outside the callback. Capture streams use bounded buffering and report dropped chunks through typed diagnostics. The pipeline also has explicit limits for pending translations.
 
 The initial policy should favor completeness during normal load. If inference falls substantially behind live audio, the pipeline should report the lag and use an explicit recovery policy instead of silently growing memory without bound. Any decision to skip stale audio must be visible in diagnostics.
+
+Every chunk and speech segment carries media time plus a capture-timeline identity. Live timelines may include a wall-clock start anchor. A device reconnect, format change, or deliberate stale-audio skip creates a visible discontinuity rather than silently redefining time zero.
 
 ### Stable segmentation
 
@@ -259,9 +261,11 @@ Model selection will remain configurable. The anticipated development defaults a
 - `large-v3-v20240930_626MB` as the first serious multilingual accuracy baseline
 - `small` and other models retained as benchmark candidates where resource use may justify an accuracy tradeoff
 
-Whisper's direct English translation task will remain available as a future fallback and comparison baseline.
+Whisper's direct English translation task is an early comparison baseline, not merely a deferred fallback.
 
-Source-language detection will use a warm-up window and a stateful language tracker. Once selected, a language should remain latched until repeated contrary evidence crosses a defined threshold. Explicit user selection always overrides automatic detection.
+Source-language detection will use a warm-up window and a stateful language tracker. Once selected, a language should remain latched until repeated contrary evidence crosses a defined threshold. The tracker must also support mixed or code-switched speech rather than forcing a permanent single-language latch, particularly for Tagalog-English conversations. Explicit user selection always overrides automatic detection.
+
+Whisper recognition tokens and session locale tags are separate types. Whisper receives values such as `pt`; locale-aware display and evaluation may retain `pt-BR`. Already-English segments bypass translation by default.
 
 ## Speaker Diarization
 
@@ -271,11 +275,11 @@ Speaker identity is optional in the core transcript model so the same pipeline s
 
 Diarization does not identify real people automatically. Ollama must preserve the supplied speaker boundary and must never infer a speaker's name or merge separate speakers into one translated turn. Accurate real-time speaker attribution is deferred; the initial requirement applies to recorded files and post-processing.
 
-## Local Translation with Ollama
+## Local Translation
 
-[Ollama](https://ollama.com/) will serve the local language model used for English translation and contextual cleanup. The Swift client will communicate with Ollama through its local HTTP API using `URLSession`; no Python service or third-party Swift client is required.
+[Ollama](https://ollama.com/) remains the initial local-LLM candidate for English translation and contextual cleanup. The Swift client will communicate with Ollama through its local HTTP API using `URLSession`; no Python service or third-party Swift client is required. Before a full Ollama workstream is built, a thin evaluation will compare Whisper direct-to-English, Apple's Translation framework, and Ollama on representative priority-language samples.
 
-The default local endpoint is expected to be:
+The default local endpoint is expected to be the following and can be overridden through configuration or `OLLAMA_HOST`:
 
 ```text
 http://127.0.0.1:11434/api
@@ -426,7 +430,9 @@ The corpus should be versioned and balanced across the primary and secondary lan
 - Clean source text and paired ASR-degraded variants
 - Silence/empty-input cases that must not produce a translation
 
-Reference translations should be human-reviewed. Automated metrics may assist comparison, but they will not be treated as sufficient evidence of conversational translation quality.
+FLEURS will provide the reproducible multilingual read-speech baseline where its locale variants match the project languages, including Brazilian Portuguese, Filipino, Mandarin, Japanese, and Korean. FLORES text may support translation-only evaluation. Their licenses and exact corpus revisions must be recorded in the fixture manifest. Because FLEURS is read speech, a smaller separately licensed conversational set is still required for overlap, disfluency, music, and code-switching.
+
+Reference-based metrics such as chrF and an evaluated learned metric may support broad comparison. Targeted human review remains necessary, but the benchmark must not assume that its sole evaluator can judge all seven source languages directly.
 
 ### Controlled execution
 
@@ -448,13 +454,13 @@ The scoreboard will report raw measurements and a weighted score. Scores must al
 
 | Category | Weight | Measurements |
 |---|---:|---|
-| Meaning preservation | 25 | Human adequacy rating; omissions; reversals; mistranslations |
+| Meaning preservation | 25 | Reference-based metrics plus targeted adequacy review; omissions; reversals; mistranslations |
 | English quality | 10 | Fluency, grammar, and natural conversational phrasing |
 | Details and entities | 10 | Names, numbers, dates, units, terminology, and negation preserved |
 | Hallucination control | 10 | Invented content, commentary, and non-empty answers for empty input |
 | ASR robustness | 10 | Quality on noisy, incomplete, or poorly punctuated WhisperKit text |
 | Context and speakers | 5 | Correct use of bounded history without merging or reassigning speakers |
-| Structured-output reliability | 5 | Valid schema, unchanged source text, and no extra prose |
+| Structured-output reliability | 5 | Valid translation-only schema and no extra prose |
 | Warm translation latency | 10 | Median and 95th-percentile time per finalized utterance |
 | Resource use | 10 | Peak memory, model size, and contention with WhisperKit |
 | Startup behavior | 5 | Cold-load time and first-result latency |
@@ -465,6 +471,13 @@ The overall score is useful for ranking, but model selection should consider two
 - **Live-use leader:** best model meeting the latency and memory budget on the target Mac.
 
 A model that fails mandatory checks—such as frequently producing invalid output, changing source text, or hallucinating on empty input—should be marked ineligible even if its aggregate score is high.
+
+### Operating profiles
+
+The shared core supports two deliberately different orchestration profiles:
+
+- **Live:** latency-first, bounded queues, prompt source-only output, and no required diarization. Robustness and timely recovery take priority over maximum model quality.
+- **Offline:** quality-first processing for podcasts and interviews, with larger models, optional diarization, and post-processing. Incremental output is still required so long recordings do not accumulate entirely in memory.
 
 ### Benchmark artifacts
 
@@ -505,6 +518,19 @@ bfish benchmark translation \
   --output Benchmarks/Runs/<run-id>
 ```
 
+## External Review Workflow
+
+External architecture and code reviews are stored in [`Reviews/`](Reviews/). Review files are reference inputs and remain read-only during coding sessions; development work may update project code and documentation, but must not edit, rename, or delete the original review notes.
+
+At the start of a new session:
+
+1. Pull the latest `origin/main` before planning new work.
+2. Check `Reviews/` for files that have not yet been considered.
+3. Ingest new feedback by validating it against the current code and recording accepted decisions in the README, session notes, or implementation plan.
+4. Do not re-ingest reviews already recorded as considered unless the user requests another analysis.
+
+Review recommendations are advisory. They become project decisions only after they have been evaluated against the current implementation and documented or implemented explicitly.
+
 ## Development Milestones
 
 ### 1. Project foundation — scaffold complete
@@ -519,7 +545,8 @@ bfish benchmark translation \
 
 - Load a known audio file.
 - Transcribe it in the source language with WhisperKit.
-- Translate the transcript through Ollama.
+- Run a thin three-way comparison of Whisper direct translation, Apple Translation, and Ollama.
+- Measure warm/cold latency and unified-memory contention on the target Mac before committing to the full translation adapter.
 - Print source text and English output with timing information.
 
 ### 3. WhisperKit language evaluation
@@ -529,9 +556,9 @@ bfish benchmark translation \
 - Record latency, memory usage, detected language, and transcript quality.
 - Select a speech-recognition default while preserving command-line overrides.
 
-### 4. Offline LLM translation scoreboard
+### 4. Offline translation scoreboard
 
-- Build the versioned multilingual text and ASR-degraded fixture corpus.
+- Establish a versioned FLEURS/FLORES baseline plus a small conversational and ASR-degraded fixture corpus.
 - Implement repeatable Ollama model runs and structured result capture.
 - Add deterministic checks and human-review fields.
 - Generate per-language, quality-leader, and live-use scoreboards.
@@ -581,7 +608,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Integrate WhisperKit and build the audio-file transcription proof of concept, then add the schema-constrained Ollama translator. The current scaffold builds with Xcode 26.6 and Swift 6.3.3 on Apple Silicon macOS 26.4.1. The packaged `doctor` command verifies full Xcode selection, embedded permission metadata, code signing, and a reachable Ollama service with installed models.
+Integrate WhisperKit and build the audio-file transcription proof of concept, then run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. The scaffold uses validated inference timestamps, a streaming/error-isolated pipeline, bounded capture contracts, privacy-safe versioned diagnostics, and separate Whisper-language and locale types. `bfish doctor --json` provides a machine-readable preflight report.
 
 ## Related Projects and Prior Art
 

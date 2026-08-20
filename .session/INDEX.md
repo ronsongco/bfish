@@ -4,6 +4,13 @@
 Build a local macOS process that captures audio, transcribes multilingual speech, translates it to English, and displays stable bilingual text, with reusable Swift core code suitable for a later native SwiftUI app.
 > See [README.md](../README.md) for full project context and architecture.
 
+## Session Startup Workflow
+
+- Pull the latest `origin/main` before determining the next task.
+- Check [`Reviews/`](../Reviews/) for newly added external review files.
+- Treat everything in `Reviews/` as read-only during coding sessions.
+- Ingest only new or explicitly requested reviews; record resulting project decisions elsewhere rather than modifying the source review.
+
 ---
 
 ## Session Log

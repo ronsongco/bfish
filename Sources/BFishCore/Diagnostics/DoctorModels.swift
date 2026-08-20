@@ -17,9 +17,13 @@ public struct DoctorCheck: Codable, Equatable, Sendable {
 }
 
 public struct DoctorReport: Codable, Equatable, Sendable {
+    public static let currentSchemaVersion = 1
+
+    public let schemaVersion: Int
     public let checks: [DoctorCheck]
 
-    public init(checks: [DoctorCheck]) {
+    public init(schemaVersion: Int = DoctorReport.currentSchemaVersion, checks: [DoctorCheck]) {
+        self.schemaVersion = schemaVersion
         self.checks = checks
     }
 

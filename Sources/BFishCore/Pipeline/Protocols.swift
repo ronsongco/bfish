@@ -1,15 +1,34 @@
 import Foundation
 
 public protocol AudioCapturing: Sendable {
-    func frames(from input: AudioInput) -> AsyncThrowingStream<AudioFrame, Error>
+    /// Implementations must use bounded buffering and report dropped chunks.
+    func chunks(from input: AudioInput, buffering: AudioBufferingPolicy) -> CapturedAudioStream
+}
+
+public struct AudioBufferingPolicy: Equatable, Sendable {
+    public let newestChunkLimit: Int
+
+    public init(newestChunkLimit: Int = 32) {
+        self.newestChunkLimit = max(1, newestChunkLimit)
+    }
+}
+
+public struct CapturedAudioStream: Sendable {
+    public let chunks: AsyncThrowingStream<AudioChunk, Error>
+    public let diagnostics: AsyncStream<DiagnosticEvent>
+
+    public init(chunks: AsyncThrowingStream<AudioChunk, Error>, diagnostics: AsyncStream<DiagnosticEvent>) {
+        self.chunks = chunks
+        self.diagnostics = diagnostics
+    }
 }
 
 public protocol SpeechSegmenting: Sendable {
-    func segments(from frames: AsyncThrowingStream<AudioFrame, Error>) -> AsyncThrowingStream<[Float], Error>
+    func segments(from chunks: AsyncThrowingStream<AudioChunk, Error>) -> AsyncThrowingStream<SpeechSegment, Error>
 }
 
 public protocol SpeechRecognizing: Sendable {
-    func transcribe(_ input: AudioInput, language: LanguageTag) async throws -> [RecognizedSegment]
+    func transcribe(_ input: AudioInput, language: WhisperLanguage) async throws -> [RecognizedSegment]
 }
 
 public struct TranslationRequest: Sendable {

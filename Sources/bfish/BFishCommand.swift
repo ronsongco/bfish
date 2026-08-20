@@ -14,7 +14,18 @@ enum BFishCommand {
             print("bfish \(BFishCore.version)")
         case "doctor":
             let report = await Doctor.run()
-            Doctor.print(report)
+            if arguments.dropFirst().contains("--json") {
+                do {
+                    let encoder = JSONEncoder()
+                    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+                    FileHandle.standardOutput.write(try encoder.encode(report))
+                    FileHandle.standardOutput.write(Data("\n".utf8))
+                } catch {
+                    FileHandle.standardError.write(Data("Unable to encode doctor report: \(error)\n".utf8))
+                }
+            } else {
+                Doctor.print(report)
+            }
             if report.hasFailures {
                 Foundation.exit(1)
             }
@@ -31,7 +42,8 @@ enum BFishCommand {
       bfish <command>
 
     COMMANDS
-      doctor     Inspect local platform, developer tools, permissions metadata, and Ollama
+      doctor [--json]
+                 Inspect local platform, resources, permissions, signing, and Ollama
       version    Print the bfish version
       help       Show this help
 

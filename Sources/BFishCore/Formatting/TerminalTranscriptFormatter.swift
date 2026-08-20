@@ -19,9 +19,6 @@ public struct TerminalTranscriptFormatter: TranscriptFormatting {
         let minutes = (total % 3_600) / 60
         let remainingSeconds = total % 60
 
-        if hours > 0 {
-            return String(format: "%02d:%02d:%02d", hours, minutes, remainingSeconds)
-        }
-        return String(format: "%02d:%02d", minutes, remainingSeconds)
+        return String(format: "%02d:%02d:%02d", hours, minutes, remainingSeconds)
     }
 }

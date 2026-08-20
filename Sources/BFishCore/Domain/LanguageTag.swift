@@ -22,3 +22,17 @@ public struct LanguageTag: RawRepresentable, Codable, Hashable, Sendable, Custom
     public static let spanish = LanguageTag("es")
     public static let italian = LanguageTag("it")
 }
+
+/// A language value accepted by Whisper. Locale-specific presentation choices,
+/// such as Brazilian Portuguese, remain separate in `LanguageTag`.
+public enum WhisperLanguage: String, Codable, CaseIterable, Sendable {
+    case automatic = "auto"
+    case english = "en"
+    case japanese = "ja"
+    case korean = "ko"
+    case mandarin = "zh"
+    case portuguese = "pt"
+    case tagalog = "tl"
+    case spanish = "es"
+    case italian = "it"
+}

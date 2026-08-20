@@ -6,6 +6,8 @@ enum Doctor {
         var checks: [DoctorCheck] = []
         checks.append(platformCheck())
         checks.append(architectureCheck())
+        checks.append(memoryCheck())
+        checks.append(diskCheck())
         checks.append(commandCheck(name: "Xcode", executable: "/usr/bin/xcodebuild", arguments: ["-version"]))
         checks.append(commandCheck(name: "Developer directory", executable: "/usr/bin/xcode-select", arguments: ["-p"]))
         checks.append(permissionMetadataCheck())
@@ -73,7 +75,16 @@ enum Doctor {
         let identityLine = result.output
             .split(separator: "\n")
             .first { $0.hasPrefix("Authority=") || $0.hasPrefix("Signature=") }
-        return DoctorCheck(name: "Code signing", status: .pass, detail: identityLine.map(String.init) ?? "signature present")
+        let identity = identityLine.map(String.init) ?? "signature present"
+        let lowercasedOutput = result.output.lowercased()
+        if lowercasedOutput.contains("signature=adhoc") {
+            return DoctorCheck(
+                name: "Code signing",
+                status: .warning,
+                detail: "\(identity); ad-hoc identity may not preserve TCC grants across builds"
+            )
+        }
+        return DoctorCheck(name: "Code signing", status: .pass, detail: identity)
     }
 
     private static func commandCheck(name: String, executable: String, arguments: [String]) -> DoctorCheck {
@@ -86,8 +97,14 @@ enum Doctor {
     }
 
     private static func ollamaCheck() async -> DoctorCheck {
-        guard let url = URL(string: "http://127.0.0.1:11434/api/tags") else {
-            return DoctorCheck(name: "Ollama", status: .fail, detail: "invalid default endpoint")
+        let configuredHost = ProcessInfo.processInfo.environment["OLLAMA_HOST"] ?? "http://127.0.0.1:11434"
+        let host = configuredHost.contains("://") ? configuredHost : "http://\(configuredHost)"
+        guard var components = URLComponents(string: host) else {
+            return DoctorCheck(name: "Ollama", status: .fail, detail: "invalid OLLAMA_HOST: \(configuredHost)")
+        }
+        components.path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/api/tags"
+        guard let url = components.url else {
+            return DoctorCheck(name: "Ollama", status: .fail, detail: "invalid OLLAMA_HOST: \(configuredHost)")
         }
 
         do {
@@ -99,9 +116,40 @@ enum Doctor {
             }
 
             let tags = try JSONDecoder().decode(OllamaTags.self, from: data)
-            return DoctorCheck(name: "Ollama", status: .pass, detail: "reachable with \(tags.models.count) installed model(s)")
+            return DoctorCheck(
+                name: "Ollama",
+                status: tags.models.isEmpty ? .warning : .pass,
+                detail: "reachable at \(url.host ?? configuredHost) with \(tags.models.count) installed model(s); translation suitability not yet verified"
+            )
         } catch {
-            return DoctorCheck(name: "Ollama", status: .fail, detail: "not reachable at 127.0.0.1:11434")
+            return DoctorCheck(name: "Ollama", status: .fail, detail: "not reachable at \(configuredHost)")
+        }
+    }
+
+    private static func memoryCheck() -> DoctorCheck {
+        let bytes = ProcessInfo.processInfo.physicalMemory
+        let gibibytes = Double(bytes) / 1_073_741_824
+        return DoctorCheck(
+            name: "Physical memory",
+            status: gibibytes >= 16 ? .pass : .warning,
+            detail: String(format: "%.1f GiB installed; simultaneous model capacity must be benchmarked", gibibytes)
+        )
+    }
+
+    private static func diskCheck() -> DoctorCheck {
+        do {
+            let values = try URL(fileURLWithPath: NSHomeDirectory()).resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+            guard let bytes = values.volumeAvailableCapacityForImportantUsage else {
+                return DoctorCheck(name: "Available disk", status: .warning, detail: "capacity unavailable")
+            }
+            let gibibytes = Double(bytes) / 1_073_741_824
+            return DoctorCheck(
+                name: "Available disk",
+                status: gibibytes >= 20 ? .pass : .warning,
+                detail: String(format: "%.1f GiB available for models and benchmark artifacts", gibibytes)
+            )
+        } catch {
+            return DoctorCheck(name: "Available disk", status: .warning, detail: error.localizedDescription)
         }
     }
 
@@ -115,8 +163,8 @@ enum Doctor {
 
         do {
             try process.run()
-            process.waitUntilExit()
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
             return (process.terminationStatus, String(decoding: data, as: UTF8.self))
         } catch {
             return (1, error.localizedDescription)

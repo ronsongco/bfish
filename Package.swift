@@ -13,7 +13,8 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "BFishCore"
+            name: "BFishCore",
+            resources: [.copy("Resources/VERSION")]
         ),
         .executableTarget(
             name: "bfish",
