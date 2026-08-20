@@ -38,6 +38,7 @@ public actor TranslationPipeline {
     private let translationTimeout: Duration
     private let englishBypassPolicy: EnglishBypassPolicy
     private let maximumNoSpeechProbability: Double
+    private let sessionLocale: SessionLocale?
 
     private var activeSessionID: UUID?
     private var contextTurns: [TranscriptTurn] = []
@@ -50,7 +51,8 @@ public actor TranslationPipeline {
         contextCharacterLimit: Int? = nil,
         translationTimeout: Duration? = nil,
         englishBypassPolicy: EnglishBypassPolicy = .highConfidenceOnly(minimumConfidence: 0.9),
-        maximumNoSpeechProbability: Double = 0.6
+        maximumNoSpeechProbability: Double = 0.6,
+        sessionLocale: SessionLocale? = nil
     ) {
         self.recognizer = recognizer
         self.translator = translator
@@ -59,6 +61,7 @@ public actor TranslationPipeline {
         self.translationTimeout = translationTimeout ?? profile.translationTimeout
         self.englishBypassPolicy = englishBypassPolicy
         self.maximumNoSpeechProbability = min(1, max(0, maximumNoSpeechProbability))
+        self.sessionLocale = sessionLocale
     }
 
     /// Primary API. Finalized transcript events use unbounded buffering because
@@ -123,7 +126,7 @@ public actor TranslationPipeline {
         }
 
         if let probability = segment.noSpeechProbability, probability > maximumNoSpeechProbability {
-            let turn = TranscriptTurn(segment: segment, englishText: nil)
+            let turn = TranscriptTurn(segment: segment, englishText: nil, sessionLocale: sessionLocale)
             return [
                 .transcript(turn),
                 .diagnostic(DiagnosticEvent(
@@ -135,7 +138,7 @@ public actor TranslationPipeline {
         }
 
         if shouldBypassEnglish(segment) {
-            let turn = TranscriptTurn(segment: segment, englishText: segment.sourceText)
+            let turn = TranscriptTurn(segment: segment, englishText: segment.sourceText, sessionLocale: sessionLocale)
             retainForContext(turn)
             return [.transcript(turn)]
         }
@@ -154,7 +157,7 @@ public actor TranslationPipeline {
                 )
             }
             guard activeSessionID == sessionID else { return [] }
-            let turn = TranscriptTurn(segment: segment, englishText: response.englishText)
+            let turn = TranscriptTurn(segment: segment, englishText: response.englishText, sessionLocale: sessionLocale)
             retainForContext(turn)
             return [
                 .transcript(turn),
@@ -169,7 +172,7 @@ public actor TranslationPipeline {
             ]
         } catch {
             guard activeSessionID == sessionID else { return [] }
-            let turn = TranscriptTurn(segment: segment, englishText: nil)
+            let turn = TranscriptTurn(segment: segment, englishText: nil, sessionLocale: sessionLocale)
             retainForContext(turn)
             return [
                 .transcript(turn),
@@ -246,7 +249,7 @@ public actor TranslationPipeline {
             ]
             if bracketPairs[first] == last { return .annotation }
         }
-        return trimmed.unicodeScalars.contains { CharacterSet.letters.contains($0) } ? nil : .noLetters
+        return trimmed.unicodeScalars.contains { CharacterSet.alphanumerics.contains($0) } ? nil : .noLetters
     }
 
     private static func errorCode(for error: any Error) -> String {

@@ -69,6 +69,35 @@ func bracketedAnnotationsAreFilteredWithDiagnostics(_ sourceText: String) async 
     #expect(await translator.contextCounts.isEmpty)
 }
 
+@Test(arguments: ["2026", "42", "3.14", "50%", "$100", "７８９"])
+func numericSegmentsAreMeaningfulContent(_ sourceText: String) {
+    #expect(TranslationPipeline.filterReason(for: sourceText) == nil)
+}
+
+@Test(arguments: ["。。。", "♪", "...", "!!!"])
+func punctuationOnlySegmentsAreFiltered(_ sourceText: String) {
+    #expect(TranslationPipeline.filterReason(for: sourceText) == .noLetters)
+}
+
+@Test func pipelineAppliesSessionLocaleCentrally() async throws {
+    let segment = RecognizedSegment(
+        timeRange: try AudioTimeRange(start: 0, end: 1),
+        timeline: testTimeline,
+        language: .portuguese,
+        sourceText: "Olá"
+    )
+    let pipeline = TranslationPipeline(
+        recognizer: RecognizerStub(segments: [segment]),
+        translator: TranslatorStub(),
+        profile: .offline,
+        sessionLocale: .brazilianPortuguese
+    )
+
+    let turns = try await pipeline.process(.file(URL(fileURLWithPath: "/tmp/example.wav")))
+
+    #expect(turns.first?.sessionLocale == .brazilianPortuguese)
+}
+
 @Test func suppressedNoSpeechTurnDoesNotEnterTranslationContext() async throws {
     let segments = [
         RecognizedSegment(

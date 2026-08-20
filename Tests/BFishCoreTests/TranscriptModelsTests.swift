@@ -44,15 +44,24 @@ import Testing
         timeRange: try AudioTimeRange(start: 1, end: 2),
         timeline: CaptureTimeline(id: UUID(uuidString: "00000000-0000-0000-0000-000000000012")!),
         language: .portuguese,
-        sessionLocale: .brazilianPortuguese,
         sourceText: "Olá"
     )
 
     let output = TerminalTranscriptFormatter().format(
-        TranscriptTurn(segment: segment, englishText: "Hello")
+        TranscriptTurn(segment: segment, englishText: "Hello", sessionLocale: .brazilianPortuguese)
     )
 
     #expect(output.contains("[pt-BR]"))
+}
+
+@Test func sessionLocaleNormalizesAndRejectsInvalidIdentifiers() throws {
+    #expect(SessionLocale("PT-br")?.rawValue == "pt-BR")
+    #expect(SessionLocale("zh-hans-cn")?.rawValue == "zh-Hans-CN")
+    #expect(SessionLocale("nonsense") == nil)
+    #expect(SessionLocale("pt-") == nil)
+    #expect(throws: (any Error).self) {
+        try JSONDecoder().decode(SessionLocale.self, from: Data(#""invalid-locale-name""#.utf8))
+    }
 }
 
 @Test func diagnosticEventProducesOneJSONLine() throws {

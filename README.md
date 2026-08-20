@@ -267,7 +267,7 @@ Whisper's direct English translation task is an early comparison baseline, not m
 
 Source-language detection will use a warm-up window and a stateful language tracker. Once selected, a language should remain latched until repeated contrary evidence crosses a defined threshold. The tracker must also support mixed or code-switched speech rather than forcing a permanent single-language latch, particularly for Tagalog-English conversations. Explicit user selection always overrides automatic detection.
 
-Whisper recognition tokens and session locale tags are separate types. `WhisperLanguage` validates and normalizes the complete token set supported by Whisper, while an optional `SessionLocale` carries locale-aware values such as `pt-BR` through recognized segments, transcript turns, and terminal display. Detected languages use the same validated type as language overrides.
+Whisper recognition tokens and session locale tags are separate types. `WhisperLanguage` validates and normalizes the complete token set supported by Whisper, while an optional, validated `SessionLocale` is configured once on the pipeline session and carries locale-aware values such as `pt-BR` into transcript turns and terminal display. Detected languages use the same validated type as language overrides.
 
 English bypass is configurable. The default bypasses only a high-confidence English segment that is not marked as mixed-language; a code-switched segment continues through translation. The adapter must propagate language confidence, recognition confidence, mixed-language evidence, and no-speech probability so this policy and later quality gates are evidence-based.
 
@@ -411,6 +411,7 @@ Model files and generated caches should live outside the Git repository in Appli
 - Stable device identifiers should be used internally even when the CLI accepts human-readable names.
 - Stage timing and operational events should be available as JSON Lines on standard error.
 - Content-free and bracketed non-speech segments should emit privacy-safe filter diagnostics instead of disappearing silently.
+- Diagnostic JSONL schema changes are recorded in [`docs/diagnostics-schema.md`](docs/diagnostics-schema.md).
 
 ## Offline Translation Model Evaluation
 

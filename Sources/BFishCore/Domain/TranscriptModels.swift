@@ -104,7 +104,6 @@ public struct RecognizedSegment: Codable, Equatable, Sendable, Identifiable {
     public let timeRange: AudioTimeRange
     public let timeline: CaptureTimeline
     public let language: WhisperLanguage
-    public let sessionLocale: SessionLocale?
     public let sourceText: String
     public let speaker: SpeakerID?
     public let confidence: Double?
@@ -117,7 +116,6 @@ public struct RecognizedSegment: Codable, Equatable, Sendable, Identifiable {
         timeRange: AudioTimeRange,
         timeline: CaptureTimeline,
         language: WhisperLanguage,
-        sessionLocale: SessionLocale? = nil,
         sourceText: String,
         speaker: SpeakerID? = nil,
         confidence: Double? = nil,
@@ -129,7 +127,6 @@ public struct RecognizedSegment: Codable, Equatable, Sendable, Identifiable {
         self.timeRange = timeRange
         self.timeline = timeline
         self.language = language
-        self.sessionLocale = sessionLocale
         self.sourceText = sourceText
         self.speaker = speaker
         self.confidence = confidence
@@ -149,12 +146,12 @@ public struct TranscriptTurn: Codable, Equatable, Sendable, Identifiable {
     public let englishText: String?
     public let speaker: SpeakerID?
 
-    public init(segment: RecognizedSegment, englishText: String?) {
+    public init(segment: RecognizedSegment, englishText: String?, sessionLocale: SessionLocale? = nil) {
         self.id = segment.id
         self.timeRange = segment.timeRange
         self.timeline = segment.timeline
         self.language = segment.language
-        self.sessionLocale = segment.sessionLocale
+        self.sessionLocale = sessionLocale
         self.sourceText = segment.sourceText
         self.englishText = englishText
         self.speaker = segment.speaker
