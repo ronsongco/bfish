@@ -267,7 +267,7 @@ Whisper's direct English translation task is an early comparison baseline, not m
 
 Source-language detection will use a warm-up window and a stateful language tracker. Once selected, a language should remain latched until repeated contrary evidence crosses a defined threshold. The tracker must also support mixed or code-switched speech rather than forcing a permanent single-language latch, particularly for Tagalog-English conversations. Explicit user selection always overrides automatic detection.
 
-Whisper recognition tokens and session locale tags are separate types. `WhisperLanguage` validates and normalizes the complete token set supported by Whisper, while locale-aware display and evaluation may retain values such as `pt-BR`. Detected languages use the same validated type as language overrides.
+Whisper recognition tokens and session locale tags are separate types. `WhisperLanguage` validates and normalizes the complete token set supported by Whisper, while an optional `SessionLocale` carries locale-aware values such as `pt-BR` through recognized segments, transcript turns, and terminal display. Detected languages use the same validated type as language overrides.
 
 English bypass is configurable. The default bypasses only a high-confidence English segment that is not marked as mixed-language; a code-switched segment continues through translation. The adapter must propagate language confidence, recognition confidence, mixed-language evidence, and no-speech probability so this policy and later quality gates are evidence-based.
 
@@ -301,7 +301,7 @@ The Ollama model will be configurable rather than hard-coded. A default will be 
 
 Only finalized speech segments should be submitted to Ollama. Each request may contain a small amount of recent transcript context for disambiguation, but prior context must not be retranslated or repeated.
 
-Context is bounded by both turn count and the character cost of source plus prior English text. If the immediately preceding turn alone exceeds the budget, older turns are not substituted because that would create a hidden conversational discontinuity. Backend-reported prompt token counts are recorded when available.
+Context storage and prompt construction are bounded by turn count and by the character cost of source plus prior English text. Filtered or high-no-speech segments remain observable but never enter translation context. If the immediately preceding retained turn alone exceeds the prompt budget, older turns are not substituted because that would create a hidden conversational discontinuity. Backend-reported prompt token counts are recorded when available.
 
 The initial implementation should use low-temperature, non-streaming, structured responses. Source text will not be echoed through the model because the application already owns the authoritative source segment. Conceptually, Ollama will return:
 
@@ -389,6 +389,8 @@ Values expected to be configurable include:
 - Ollama endpoint
 - Ollama model
 - Automatic or explicit source language
+- Optional session locale, such as `pt-BR`
+- Explicit live or offline pipeline profile
 - Translation engine
 - Context window duration or segment count
 - Output format
@@ -408,6 +410,7 @@ Model files and generated caches should live outside the Git repository in Appli
 - One failed segment should not necessarily terminate an otherwise healthy live session.
 - Stable device identifiers should be used internally even when the CLI accepts human-readable names.
 - Stage timing and operational events should be available as JSON Lines on standard error.
+- Content-free and bracketed non-speech segments should emit privacy-safe filter diagnostics instead of disappearing silently.
 
 ## Offline Translation Model Evaluation
 
@@ -487,7 +490,7 @@ The shared core supports two deliberately different orchestration profiles:
 - **Live:** latency-first, bounded queues, prompt source-only output, and no required diarization. Robustness and timely recovery take priority over maximum model quality.
 - **Offline:** quality-first processing for podcasts and interviews, with larger models, optional diarization, and post-processing. Incremental output is still required so long recordings do not accumulate entirely in memory.
 
-These profiles are represented by `PipelineProfile`, which supplies distinct buffering, context, and timeout defaults. Finalized transcript output is never placed in a dropping buffer; only replaceable live audio may use a drop-oldest/newest recovery policy with an explicit diagnostic.
+These profiles are represented by `PipelineProfile`, which supplies distinct buffering, context, and timeout defaults. Pipeline construction requires an explicit profile so file processing cannot accidentally inherit live defaults. Finalized transcript output is never placed in a dropping buffer; only replaceable live audio may use a drop-oldest/newest recovery policy with an explicit diagnostic.
 
 ### Benchmark artifacts
 

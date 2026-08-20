@@ -45,7 +45,7 @@ public actor TranslationPipeline {
     public init(
         recognizer: any SpeechRecognizing,
         translator: any TextTranslating,
-        profile: PipelineProfile = .live,
+        profile: PipelineProfile,
         contextLimit: Int? = nil,
         contextCharacterLimit: Int? = nil,
         translationTimeout: Duration? = nil,
@@ -113,11 +113,17 @@ public actor TranslationPipeline {
     }
 
     private func handle(_ segment: RecognizedSegment, sessionID: UUID) async -> [PipelineEvent] {
-        guard activeSessionID == sessionID, Self.hasMeaningfulContent(segment.sourceText) else { return [] }
+        guard activeSessionID == sessionID else { return [] }
+        if let filterReason = Self.filterReason(for: segment.sourceText) {
+            return [.diagnostic(DiagnosticEvent(
+                event: .segmentFiltered,
+                segmentID: segment.id,
+                details: DiagnosticDetails(segmentFilterReason: filterReason)
+            ))]
+        }
 
         if let probability = segment.noSpeechProbability, probability > maximumNoSpeechProbability {
             let turn = TranscriptTurn(segment: segment, englishText: nil)
-            contextTurns.append(turn)
             return [
                 .transcript(turn),
                 .diagnostic(DiagnosticEvent(
@@ -130,7 +136,7 @@ public actor TranslationPipeline {
 
         if shouldBypassEnglish(segment) {
             let turn = TranscriptTurn(segment: segment, englishText: segment.sourceText)
-            contextTurns.append(turn)
+            retainForContext(turn)
             return [.transcript(turn)]
         }
 
@@ -147,8 +153,9 @@ public actor TranslationPipeline {
                     TranslationRequest(segment: segment, recentContext: context)
                 )
             }
+            guard activeSessionID == sessionID else { return [] }
             let turn = TranscriptTurn(segment: segment, englishText: response.englishText)
-            contextTurns.append(turn)
+            retainForContext(turn)
             return [
                 .transcript(turn),
                 .diagnostic(DiagnosticEvent(
@@ -161,8 +168,9 @@ public actor TranslationPipeline {
                 )),
             ]
         } catch {
+            guard activeSessionID == sessionID else { return [] }
             let turn = TranscriptTurn(segment: segment, englishText: nil)
-            contextTurns.append(turn)
+            retainForContext(turn)
             return [
                 .transcript(turn),
                 .diagnostic(DiagnosticEvent(
@@ -193,6 +201,16 @@ public actor TranslationPipeline {
         contextTurns = []
     }
 
+    private func retainForContext(_ turn: TranscriptTurn) {
+        contextTurns.append(turn)
+        contextTurns = Self.trimmedContextHistory(contextTurns, limit: contextTurnLimit)
+    }
+
+    static func trimmedContextHistory(_ turns: [TranscriptTurn], limit: Int) -> [TranscriptTurn] {
+        guard limit > 0 else { return [] }
+        return Array(turns.suffix(limit))
+    }
+
     static func boundedContext(
         _ turns: [TranscriptTurn],
         turnLimit: Int,
@@ -219,14 +237,16 @@ public actor TranslationPipeline {
         turn.sourceText.count + (turn.englishText?.count ?? 0)
     }
 
-    private static func hasMeaningfulContent(_ text: String) -> Bool {
+    static func filterReason(for text: String) -> SegmentFilterReason? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        if let first = trimmed.first, let last = trimmed.last,
-           ["[", "("].contains(first), ["]", ")"].contains(last) {
-            return false
+        guard !trimmed.isEmpty else { return .empty }
+        if let first = trimmed.first, let last = trimmed.last {
+            let bracketPairs: [Character: Character] = [
+                "[": "]", "(": ")", "［": "］", "（": "）", "【": "】", "〔": "〕",
+            ]
+            if bracketPairs[first] == last { return .annotation }
         }
-        return trimmed.unicodeScalars.contains { CharacterSet.letters.contains($0) }
+        return trimmed.unicodeScalars.contains { CharacterSet.letters.contains($0) } ? nil : .noLetters
     }
 
     private static func errorCode(for error: any Error) -> String {

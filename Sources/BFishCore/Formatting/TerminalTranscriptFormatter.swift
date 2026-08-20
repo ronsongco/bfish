@@ -4,7 +4,8 @@ public struct TerminalTranscriptFormatter: TranscriptFormatting {
     public init() {}
 
     public func format(_ turn: TranscriptTurn) -> String {
-        var header = "[\( Self.timestamp(turn.timeRange.start))] [\(turn.language.rawValue)]"
+        let displayedLanguage = turn.sessionLocale?.rawValue ?? turn.language.rawValue
+        var header = "[\( Self.timestamp(turn.timeRange.start))] [\(displayedLanguage)]"
         if let speaker = turn.speaker {
             header += " [\(speaker.rawValue)]"
         }

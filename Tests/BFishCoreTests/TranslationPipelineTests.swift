@@ -2,21 +2,29 @@ import Foundation
 import Testing
 @testable import BFishCore
 
+private let testTimeline = CaptureTimeline(
+    id: UUID(uuidString: "00000000-0000-0000-0000-000000000099")!,
+    startedAt: Date(timeIntervalSince1970: 1_000)
+)
+
 @Test func pipelineTranslatesNonEmptySegmentsAndPassesBoundedContext() async throws {
     let segments = [
         RecognizedSegment(
             timeRange: try AudioTimeRange(start: 0, end: 2),
+            timeline: testTimeline,
             language: .japanese,
             sourceText: "こんにちは。",
             speaker: SpeakerID("Speaker 1")
         ),
         RecognizedSegment(
             timeRange: try AudioTimeRange(start: 2, end: 3),
+            timeline: testTimeline,
             language: .japanese,
             sourceText: "   "
         ),
         RecognizedSegment(
             timeRange: try AudioTimeRange(start: 3, end: 5),
+            timeline: testTimeline,
             language: .japanese,
             sourceText: "元気ですか。",
             speaker: SpeakerID("Speaker 2")
@@ -24,32 +32,116 @@ import Testing
     ]
     let recognizer = RecognizerStub(segments: segments)
     let translator = TranslatorStub()
-    let pipeline = TranslationPipeline(recognizer: recognizer, translator: translator, contextLimit: 1)
+    let pipeline = TranslationPipeline(recognizer: recognizer, translator: translator, profile: .offline, contextLimit: 1)
 
     let turns = try await pipeline.process(.file(URL(fileURLWithPath: "/tmp/example.wav")))
 
     #expect(turns.count == 2)
     #expect(turns[0].englishText == "English: こんにちは。")
     #expect(turns[1].englishText == "English: 元気ですか。")
+    #expect(turns.allSatisfy { $0.timeline == testTimeline })
     #expect(await translator.contextCounts == [0, 1])
+}
+
+@Test(arguments: ["[Music]", "（笑）", "［音楽］", "【拍手】", "〔音楽〕"])
+func bracketedAnnotationsAreFilteredWithDiagnostics(_ sourceText: String) async throws {
+    let segment = RecognizedSegment(
+        timeRange: try AudioTimeRange(start: 0, end: 1),
+        timeline: testTimeline,
+        language: .japanese,
+        sourceText: sourceText
+    )
+    let translator = TranslatorStub()
+    let pipeline = TranslationPipeline(
+        recognizer: RecognizerStub(segments: [segment]),
+        translator: translator,
+        profile: .offline
+    )
+
+    var diagnostics: [DiagnosticEvent] = []
+    for try await event in await pipeline.events(for: .file(URL(fileURLWithPath: "/tmp/example.wav"))) {
+        if case let .diagnostic(diagnostic) = event { diagnostics.append(diagnostic) }
+    }
+
+    #expect(diagnostics.count == 1)
+    #expect(diagnostics[0].event == .segmentFiltered)
+    #expect(diagnostics[0].details?.segmentFilterReason == .annotation)
+    #expect(await translator.contextCounts.isEmpty)
+}
+
+@Test func suppressedNoSpeechTurnDoesNotEnterTranslationContext() async throws {
+    let segments = [
+        RecognizedSegment(
+            timeRange: try AudioTimeRange(start: 0, end: 1),
+            timeline: testTimeline,
+            language: .japanese,
+            sourceText: "最初"
+        ),
+        RecognizedSegment(
+            timeRange: try AudioTimeRange(start: 1, end: 2),
+            timeline: testTimeline,
+            language: .japanese,
+            sourceText: "ご視聴ありがとうございました",
+            noSpeechProbability: 0.95
+        ),
+        RecognizedSegment(
+            timeRange: try AudioTimeRange(start: 2, end: 3),
+            timeline: testTimeline,
+            language: .japanese,
+            sourceText: "次"
+        ),
+    ]
+    let translator = TranslatorStub()
+    let pipeline = TranslationPipeline(
+        recognizer: RecognizerStub(segments: segments),
+        translator: translator,
+        profile: .offline
+    )
+
+    _ = try await pipeline.process(.file(URL(fileURLWithPath: "/tmp/example.wav")))
+
+    #expect(await translator.contextSources == [[], ["最初"]])
+}
+
+@Test func retainedContextHistoryIsBounded() throws {
+    let turns = try (0..<20).map { index in
+        TranscriptTurn(
+            segment: RecognizedSegment(
+                timeRange: try AudioTimeRange(start: Double(index), end: Double(index + 1)),
+                timeline: testTimeline,
+                language: .japanese,
+                sourceText: "turn-\(index)"
+            ),
+            englishText: "english-\(index)"
+        )
+    }
+
+    let retained = TranslationPipeline.trimmedContextHistory(turns, limit: 4)
+
+    #expect(retained.count == 4)
+    #expect(retained.first?.sourceText == "turn-16")
+    #expect(retained.last?.sourceText == "turn-19")
 }
 
 @Test func pipelinePreservesSourceAndContinuesAfterTranslationFailure() async throws {
     let segments = [
         RecognizedSegment(
             timeRange: try AudioTimeRange(start: 0, end: 1),
+            timeline: testTimeline,
             language: .japanese,
             sourceText: "失敗"
         ),
         RecognizedSegment(
             timeRange: try AudioTimeRange(start: 1, end: 2),
+            timeline: testTimeline,
             language: .japanese,
             sourceText: "続行"
         ),
     ]
     let pipeline = TranslationPipeline(
         recognizer: RecognizerStub(segments: segments),
-        translator: RecoveringTranslatorStub()
+        translator: RecoveringTranslatorStub(),
+        profile: .offline
     )
 
     var turns: [TranscriptTurn] = []
@@ -72,18 +164,20 @@ import Testing
     let segments = [
         RecognizedSegment(
             timeRange: try AudioTimeRange(start: 0, end: 1),
+            timeline: testTimeline,
             language: .japanese,
             sourceText: "[Music]"
         ),
         RecognizedSegment(
             timeRange: try AudioTimeRange(start: 1, end: 2),
+            timeline: testTimeline,
             language: .english,
             sourceText: "Already English",
             languageConfidence: 0.99
         ),
     ]
     let translator = TranslatorStub()
-    let pipeline = TranslationPipeline(recognizer: RecognizerStub(segments: segments), translator: translator)
+    let pipeline = TranslationPipeline(recognizer: RecognizerStub(segments: segments), translator: translator, profile: .offline)
 
     let turns = try await pipeline.process(.file(URL(fileURLWithPath: "/tmp/example.wav")))
 
@@ -96,6 +190,7 @@ import Testing
     let older = TranscriptTurn(
         segment: RecognizedSegment(
             timeRange: try AudioTimeRange(start: 0, end: 1),
+            timeline: testTimeline,
             language: .japanese,
             sourceText: "older"
         ),
@@ -104,6 +199,7 @@ import Testing
     let newest = TranscriptTurn(
         segment: RecognizedSegment(
             timeRange: try AudioTimeRange(start: 1, end: 2),
+            timeline: testTimeline,
             language: .japanese,
             sourceText: String(repeating: "長", count: 101)
         ),
@@ -122,12 +218,14 @@ import Testing
 @Test func timeoutIsClassifiedAndProducesSourceOnlyTurn() async throws {
     let segment = RecognizedSegment(
         timeRange: try AudioTimeRange(start: 0, end: 1),
+        timeline: testTimeline,
         language: .japanese,
         sourceText: "待って"
     )
     let pipeline = TranslationPipeline(
         recognizer: RecognizerStub(segments: [segment]),
         translator: SlowTranslatorStub(),
+        profile: .live,
         translationTimeout: .milliseconds(10)
     )
 
@@ -151,13 +249,14 @@ import Testing
 @Test func mixedEnglishDoesNotBypassTranslation() async throws {
     let segment = RecognizedSegment(
         timeRange: try AudioTimeRange(start: 0, end: 1),
+        timeline: testTimeline,
         language: .english,
         sourceText: "English at Tagalog",
         languageConfidence: 0.99,
         containsMixedLanguages: true
     )
     let translator = TranslatorStub()
-    let pipeline = TranslationPipeline(recognizer: RecognizerStub(segments: [segment]), translator: translator)
+    let pipeline = TranslationPipeline(recognizer: RecognizerStub(segments: [segment]), translator: translator, profile: .live)
 
     let turns = try await pipeline.process(.file(URL(fileURLWithPath: "/tmp/example.wav")))
 
@@ -175,9 +274,11 @@ private struct RecognizerStub: SpeechRecognizing {
 
 private actor TranslatorStub: TextTranslating {
     private(set) var contextCounts: [Int] = []
+    private(set) var contextSources: [[String]] = []
 
     func translate(_ request: TranslationRequest) async throws -> TranslationResponse {
         contextCounts.append(request.recentContext.count)
+        contextSources.append(request.recentContext.map(\.sourceText))
         return TranslationResponse(englishText: "English: \(request.segment.sourceText)")
     }
 }

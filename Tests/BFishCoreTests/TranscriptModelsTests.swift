@@ -27,6 +27,7 @@ import Testing
 @Test func terminalFormatterIncludesSourceEnglishLanguageAndSpeaker() throws {
     let segment = RecognizedSegment(
         timeRange: try AudioTimeRange(start: 62, end: 68),
+        timeline: CaptureTimeline(id: UUID(uuidString: "00000000-0000-0000-0000-000000000011")!),
         language: .japanese,
         sourceText: "こんにちは。",
         speaker: SpeakerID("Host")
@@ -36,6 +37,22 @@ import Testing
     let output = TerminalTranscriptFormatter().format(turn)
 
     #expect(output == "[00:01:02] [ja] [Host]\nSource: こんにちは。\nEnglish: Hello.")
+}
+
+@Test func terminalFormatterPrefersConfiguredSessionLocale() throws {
+    let segment = RecognizedSegment(
+        timeRange: try AudioTimeRange(start: 1, end: 2),
+        timeline: CaptureTimeline(id: UUID(uuidString: "00000000-0000-0000-0000-000000000012")!),
+        language: .portuguese,
+        sessionLocale: .brazilianPortuguese,
+        sourceText: "Olá"
+    )
+
+    let output = TerminalTranscriptFormatter().format(
+        TranscriptTurn(segment: segment, englishText: "Hello")
+    )
+
+    #expect(output.contains("[pt-BR]"))
 }
 
 @Test func diagnosticEventProducesOneJSONLine() throws {
@@ -50,7 +67,7 @@ import Testing
 
     #expect(text.hasSuffix("\n"))
     #expect(text.contains("\"event\":\"segment_completed\""))
-    #expect(text.contains("\"schemaVersion\":2"))
+    #expect(text.contains("\"schemaVersion\":3"))
     #expect(text.contains("\"stage\":\"translation\""))
 }
 

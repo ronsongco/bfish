@@ -17,6 +17,13 @@ public enum DiagnosticEventKind: String, Codable, Sendable {
     case audioChunksDropped = "audio_chunks_dropped"
     case timelineDiscontinuity = "timeline_discontinuity"
     case timestampRepaired = "timestamp_repaired"
+    case segmentFiltered = "segment_filtered"
+}
+
+public enum SegmentFilterReason: String, Codable, Sendable {
+    case empty
+    case annotation
+    case noLetters
 }
 
 /// Typed diagnostic details intentionally exclude audio and transcript text.
@@ -26,24 +33,27 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let promptTokenCount: Int?
     public let contextCharacterCount: Int?
     public let timestampRepairReason: TimestampRepairReason?
+    public let segmentFilterReason: SegmentFilterReason?
 
     public init(
         errorCode: String? = nil,
         droppedChunkCount: Int? = nil,
         promptTokenCount: Int? = nil,
         contextCharacterCount: Int? = nil,
-        timestampRepairReason: TimestampRepairReason? = nil
+        timestampRepairReason: TimestampRepairReason? = nil,
+        segmentFilterReason: SegmentFilterReason? = nil
     ) {
         self.errorCode = errorCode
         self.droppedChunkCount = droppedChunkCount
         self.promptTokenCount = promptTokenCount
         self.contextCharacterCount = contextCharacterCount
         self.timestampRepairReason = timestampRepairReason
+        self.segmentFilterReason = segmentFilterReason
     }
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 2
+    public static let currentSchemaVersion = 3
 
     public let schemaVersion: Int
     public let timestamp: Date
