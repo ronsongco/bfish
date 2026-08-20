@@ -13,8 +13,10 @@ public struct StageTiming: Codable, Equatable, Sendable {
 public enum DiagnosticEventKind: String, Codable, Sendable {
     case segmentCompleted = "segment_completed"
     case translationUnavailable = "translation_unavailable"
+    case translationSuppressed = "translation_suppressed"
     case audioChunksDropped = "audio_chunks_dropped"
     case timelineDiscontinuity = "timeline_discontinuity"
+    case timestampRepaired = "timestamp_repaired"
 }
 
 /// Typed diagnostic details intentionally exclude audio and transcript text.
@@ -22,16 +24,26 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let errorCode: String?
     public let droppedChunkCount: Int?
     public let promptTokenCount: Int?
+    public let contextCharacterCount: Int?
+    public let timestampRepairReason: TimestampRepairReason?
 
-    public init(errorCode: String? = nil, droppedChunkCount: Int? = nil, promptTokenCount: Int? = nil) {
+    public init(
+        errorCode: String? = nil,
+        droppedChunkCount: Int? = nil,
+        promptTokenCount: Int? = nil,
+        contextCharacterCount: Int? = nil,
+        timestampRepairReason: TimestampRepairReason? = nil
+    ) {
         self.errorCode = errorCode
         self.droppedChunkCount = droppedChunkCount
         self.promptTokenCount = promptTokenCount
+        self.contextCharacterCount = contextCharacterCount
+        self.timestampRepairReason = timestampRepairReason
     }
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public let schemaVersion: Int
     public let timestamp: Date

@@ -7,106 +7,193 @@ public enum PipelineEvent: Sendable {
 
 public enum TranslationPipelineError: Error, Equatable, Sendable {
     case translationTimedOut
+    case sessionAlreadyRunning
 }
 
+public enum EnglishBypassPolicy: Equatable, Sendable {
+    case never
+    case highConfidenceOnly(minimumConfidence: Double)
+    case always
+}
+
+public enum PipelineProfile: String, Codable, Sendable {
+    case live
+    case offline
+
+    public var contextTurnLimit: Int { self == .live ? 4 : 8 }
+    public var contextCharacterLimit: Int { self == .live ? 2_000 : 6_000 }
+    public var translationTimeout: Duration { self == .live ? .seconds(15) : .seconds(60) }
+    public var audioBufferingPolicy: AudioBufferingPolicy {
+        AudioBufferingPolicy(newestChunkLimit: self == .live ? 32 : 128)
+    }
+}
+
+/// One stateful transcription/translation session. Context and session identity
+/// live on the actor and concurrent streams from one instance are rejected.
 public actor TranslationPipeline {
     private let recognizer: any SpeechRecognizing
     private let translator: any TextTranslating
     private let contextTurnLimit: Int
     private let contextCharacterLimit: Int
     private let translationTimeout: Duration
+    private let englishBypassPolicy: EnglishBypassPolicy
+    private let maximumNoSpeechProbability: Double
+
+    private var activeSessionID: UUID?
+    private var contextTurns: [TranscriptTurn] = []
 
     public init(
         recognizer: any SpeechRecognizing,
         translator: any TextTranslating,
-        contextLimit: Int = 4,
-        contextCharacterLimit: Int = 2_000,
-        translationTimeout: Duration = .seconds(30)
+        profile: PipelineProfile = .live,
+        contextLimit: Int? = nil,
+        contextCharacterLimit: Int? = nil,
+        translationTimeout: Duration? = nil,
+        englishBypassPolicy: EnglishBypassPolicy = .highConfidenceOnly(minimumConfidence: 0.9),
+        maximumNoSpeechProbability: Double = 0.6
     ) {
         self.recognizer = recognizer
         self.translator = translator
-        self.contextTurnLimit = max(0, contextLimit)
-        self.contextCharacterLimit = max(0, contextCharacterLimit)
-        self.translationTimeout = translationTimeout
+        self.contextTurnLimit = max(0, contextLimit ?? profile.contextTurnLimit)
+        self.contextCharacterLimit = max(0, contextCharacterLimit ?? profile.contextCharacterLimit)
+        self.translationTimeout = translationTimeout ?? profile.translationTimeout
+        self.englishBypassPolicy = englishBypassPolicy
+        self.maximumNoSpeechProbability = min(1, max(0, maximumNoSpeechProbability))
     }
 
-    /// Primary API. Recoverable translation errors produce a source-only turn
-    /// and a diagnostic rather than terminating the stream.
+    /// Primary API. Finalized transcript events use unbounded buffering because
+    /// they are product output and must never be silently discarded.
     public func events(
         for input: AudioInput,
         language: WhisperLanguage = .automatic
     ) -> AsyncThrowingStream<PipelineEvent, Error> {
-        let recognizer = self.recognizer
-        let translator = self.translator
-        let turnLimit = contextTurnLimit
-        let characterLimit = contextCharacterLimit
-        let timeout = translationTimeout
+        guard activeSessionID == nil else {
+            return AsyncThrowingStream { $0.finish(throwing: TranslationPipelineError.sessionAlreadyRunning) }
+        }
 
-        return AsyncThrowingStream(bufferingPolicy: .bufferingNewest(64)) { continuation in
+        let sessionID = UUID()
+        activeSessionID = sessionID
+        contextTurns = []
+        let recognizer = self.recognizer
+
+        return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     let segments = try await recognizer.transcribe(input, language: language)
-                    var contextTurns: [TranscriptTurn] = []
-
-                    for segment in segments where Self.hasMeaningfulContent(segment.sourceText) {
-                        if segment.language == .english {
-                            let turn = TranscriptTurn(segment: segment, englishText: segment.sourceText)
-                            contextTurns.append(turn)
-                            continuation.yield(.transcript(turn))
-                            continue
-                        }
-
-                        let context = Self.boundedContext(
-                            contextTurns,
-                            turnLimit: turnLimit,
-                            characterLimit: characterLimit
-                        )
-
-                        do {
-                            let response = try await Self.withTimeout(timeout) {
-                                try await translator.translate(
-                                    TranslationRequest(segment: segment, recentContext: context)
-                                )
-                            }
-                            let turn = TranscriptTurn(segment: segment, englishText: response.englishText)
-                            contextTurns.append(turn)
-                            continuation.yield(.transcript(turn))
-                        } catch {
-                            let turn = TranscriptTurn(segment: segment, englishText: nil)
-                            contextTurns.append(turn)
-                            continuation.yield(.transcript(turn))
-                            continuation.yield(.diagnostic(DiagnosticEvent(
-                                event: .translationUnavailable,
-                                segmentID: segment.id,
-                                details: DiagnosticDetails(errorCode: Self.errorCode(for: error))
-                            )))
+                    for segment in segments {
+                        let output = await self.handle(segment, sessionID: sessionID)
+                        for event in output {
+                            continuation.yield(event)
                         }
                     }
+                    self.endSession(sessionID)
                     continuation.finish()
                 } catch {
+                    self.endSession(sessionID)
                     continuation.finish(throwing: error)
                 }
             }
-            continuation.onTermination = { _ in task.cancel() }
+            continuation.onTermination = { _ in
+                task.cancel()
+                Task { await self.endSession(sessionID) }
+            }
         }
     }
 
-    /// Batch convenience for tests and short files. Long-running consumers
-    /// should consume `events(for:language:)` directly.
+    /// Batch convenience for tests and short files.
     public func process(
         _ input: AudioInput,
         language: WhisperLanguage = .automatic
     ) async throws -> [TranscriptTurn] {
         var turns: [TranscriptTurn] = []
         for try await event in events(for: input, language: language) {
-            if case let .transcript(turn) = event {
-                turns.append(turn)
-            }
+            if case let .transcript(turn) = event { turns.append(turn) }
         }
         return turns
     }
 
-    private static func boundedContext(
+    private func handle(_ segment: RecognizedSegment, sessionID: UUID) async -> [PipelineEvent] {
+        guard activeSessionID == sessionID, Self.hasMeaningfulContent(segment.sourceText) else { return [] }
+
+        if let probability = segment.noSpeechProbability, probability > maximumNoSpeechProbability {
+            let turn = TranscriptTurn(segment: segment, englishText: nil)
+            contextTurns.append(turn)
+            return [
+                .transcript(turn),
+                .diagnostic(DiagnosticEvent(
+                    event: .translationSuppressed,
+                    segmentID: segment.id,
+                    details: DiagnosticDetails(errorCode: "high_no_speech_probability")
+                )),
+            ]
+        }
+
+        if shouldBypassEnglish(segment) {
+            let turn = TranscriptTurn(segment: segment, englishText: segment.sourceText)
+            contextTurns.append(turn)
+            return [.transcript(turn)]
+        }
+
+        let context = Self.boundedContext(
+            contextTurns,
+            turnLimit: contextTurnLimit,
+            characterLimit: contextCharacterLimit
+        )
+        let contextCharacters = Self.characterCost(context)
+
+        do {
+            let response = try await Self.withTimeout(translationTimeout) {
+                try await self.translator.translate(
+                    TranslationRequest(segment: segment, recentContext: context)
+                )
+            }
+            let turn = TranscriptTurn(segment: segment, englishText: response.englishText)
+            contextTurns.append(turn)
+            return [
+                .transcript(turn),
+                .diagnostic(DiagnosticEvent(
+                    event: .segmentCompleted,
+                    segmentID: segment.id,
+                    details: DiagnosticDetails(
+                        promptTokenCount: response.promptTokenCount,
+                        contextCharacterCount: contextCharacters
+                    )
+                )),
+            ]
+        } catch {
+            let turn = TranscriptTurn(segment: segment, englishText: nil)
+            contextTurns.append(turn)
+            return [
+                .transcript(turn),
+                .diagnostic(DiagnosticEvent(
+                    event: .translationUnavailable,
+                    segmentID: segment.id,
+                    details: DiagnosticDetails(
+                        errorCode: Self.errorCode(for: error),
+                        contextCharacterCount: contextCharacters
+                    )
+                )),
+            ]
+        }
+    }
+
+    private func shouldBypassEnglish(_ segment: RecognizedSegment) -> Bool {
+        guard segment.language == .english, !segment.containsMixedLanguages else { return false }
+        switch englishBypassPolicy {
+        case .never: return false
+        case .always: return true
+        case let .highConfidenceOnly(minimumConfidence):
+            return (segment.languageConfidence ?? 0) >= minimumConfidence
+        }
+    }
+
+    private func endSession(_ sessionID: UUID) {
+        guard activeSessionID == sessionID else { return }
+        activeSessionID = nil
+        contextTurns = []
+    }
+
+    static func boundedContext(
         _ turns: [TranscriptTurn],
         turnLimit: Int,
         characterLimit: Int
@@ -116,25 +203,29 @@ public actor TranslationPipeline {
         var characters = 0
 
         for turn in turns.suffix(turnLimit).reversed() {
-            let cost = turn.sourceText.count
-            if !result.isEmpty, characters + cost > characterLimit { break }
-            guard cost <= characterLimit else { continue }
+            let cost = characterCost(turn)
+            if cost > characterLimit || characters + cost > characterLimit { break }
             result.append(turn)
             characters += cost
         }
         return result.reversed()
     }
 
+    static func characterCost(_ turns: [TranscriptTurn]) -> Int {
+        turns.reduce(0) { $0 + characterCost($1) }
+    }
+
+    private static func characterCost(_ turn: TranscriptTurn) -> Int {
+        turn.sourceText.count + (turn.englishText?.count ?? 0)
+    }
+
     private static func hasMeaningfulContent(_ text: String) -> Bool {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-
-        let normalized = trimmed
-            .trimmingCharacters(in: CharacterSet(charactersIn: "[]()"))
-            .lowercased()
-        let nonSpeechLabels: Set<String> = ["music", "applause", "laughter", "silence"]
-        guard !nonSpeechLabels.contains(normalized) else { return false }
-
+        if let first = trimmed.first, let last = trimmed.last,
+           ["[", "("].contains(first), ["]", ")"].contains(last) {
+            return false
+        }
         return trimmed.unicodeScalars.contains { CharacterSet.letters.contains($0) }
     }
 
@@ -143,7 +234,7 @@ public actor TranslationPipeline {
         return "translation_failed"
     }
 
-    private static func withTimeout<T: Sendable>(
+    static func withTimeout<T: Sendable>(
         _ duration: Duration,
         operation: @escaping @Sendable () async throws -> T
     ) async throws -> T {
@@ -153,9 +244,7 @@ public actor TranslationPipeline {
                 try await Task.sleep(for: duration)
                 throw TranslationPipelineError.translationTimedOut
             }
-            guard let result = try await group.next() else {
-                throw CancellationError()
-            }
+            guard let result = try await group.next() else { throw CancellationError() }
             group.cancelAll()
             return result
         }

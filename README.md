@@ -169,7 +169,9 @@ bfish/
 │       └── CLI entry point
 ├── Tests/
 │   └── BFishCoreTests/
-├── Fixtures/
+├── Benchmarks/
+│   └── Fixtures/
+├── Reviews/
 ├── docs/
 └── Scripts/
 ```
@@ -215,7 +217,7 @@ Future SwiftUI app → BFishCore pipeline
    Audio adapters  WhisperKit     Ollama client
 ```
 
-`BFishCore` will own transcript segments, translations, configuration, pipeline state, and protocol definitions. Framework-specific types from WhisperKit, AVFoundation, Core Audio, or HTTP responses should be converted at adapter boundaries and should not leak through the public domain model.
+`BFishCore` owns transcript segments, translations, configuration, pipeline session state, and protocol definitions. A `TranslationPipeline` actor represents one stateful session and rejects concurrent streams from the same instance; a caller creates a separate instance for each file or live session. Framework-specific types from WhisperKit, AVFoundation, Core Audio, or HTTP responses are converted at adapter boundaries and do not leak through the public domain model.
 
 ### Concurrency and backpressure
 
@@ -223,7 +225,7 @@ Live capture must not block the real-time audio callback. The callback writes in
 
 The initial policy should favor completeness during normal load. If inference falls substantially behind live audio, the pipeline should report the lag and use an explicit recovery policy instead of silently growing memory without bound. Any decision to skip stale audio must be visible in diagnostics.
 
-Every chunk and speech segment carries media time plus a capture-timeline identity. Live timelines may include a wall-clock start anchor. A device reconnect, format change, or deliberate stale-audio skip creates a visible discontinuity rather than silently redefining time zero.
+Every chunk, recognized segment, and transcript turn carries media time plus a capture-timeline identity. Live timelines may include a wall-clock start anchor. A device reconnect, format change, or deliberate stale-audio skip creates a visible discontinuity rather than silently redefining time zero.
 
 ### Stable segmentation
 
@@ -265,7 +267,11 @@ Whisper's direct English translation task is an early comparison baseline, not m
 
 Source-language detection will use a warm-up window and a stateful language tracker. Once selected, a language should remain latched until repeated contrary evidence crosses a defined threshold. The tracker must also support mixed or code-switched speech rather than forcing a permanent single-language latch, particularly for Tagalog-English conversations. Explicit user selection always overrides automatic detection.
 
-Whisper recognition tokens and session locale tags are separate types. Whisper receives values such as `pt`; locale-aware display and evaluation may retain `pt-BR`. Already-English segments bypass translation by default.
+Whisper recognition tokens and session locale tags are separate types. `WhisperLanguage` validates and normalizes the complete token set supported by Whisper, while locale-aware display and evaluation may retain values such as `pt-BR`. Detected languages use the same validated type as language overrides.
+
+English bypass is configurable. The default bypasses only a high-confidence English segment that is not marked as mixed-language; a code-switched segment continues through translation. The adapter must propagate language confidence, recognition confidence, mixed-language evidence, and no-speech probability so this policy and later quality gates are evidence-based.
+
+Untrusted Whisper timestamps are repaired at the adapter boundary. Non-finite values collapse to the last valid media position, negative values are clamped to zero, reversed ranges collapse to zero duration, and every repair emits a typed `timestamp_repaired` diagnostic rather than terminating a long recording.
 
 ## Speaker Diarization
 
@@ -294,6 +300,8 @@ The Ollama model will be configurable rather than hard-coded. A default will be 
 - Consistent preservation of names, numbers, and uncertainty
 
 Only finalized speech segments should be submitted to Ollama. Each request may contain a small amount of recent transcript context for disambiguation, but prior context must not be retranslated or repeated.
+
+Context is bounded by both turn count and the character cost of source plus prior English text. If the immediately preceding turn alone exceeds the budget, older turns are not substituted because that would create a hidden conversational discontinuity. Backend-reported prompt token counts are recorded when available.
 
 The initial implementation should use low-temperature, non-streaming, structured responses. Source text will not be echoed through the model because the application already owns the authoritative source segment. Conceptually, Ollama will return:
 
@@ -479,6 +487,8 @@ The shared core supports two deliberately different orchestration profiles:
 - **Live:** latency-first, bounded queues, prompt source-only output, and no required diarization. Robustness and timely recovery take priority over maximum model quality.
 - **Offline:** quality-first processing for podcasts and interviews, with larger models, optional diarization, and post-processing. Incremental output is still required so long recordings do not accumulate entirely in memory.
 
+These profiles are represented by `PipelineProfile`, which supplies distinct buffering, context, and timeout defaults. Finalized transcript output is never placed in a dropping buffer; only replaceable live audio may use a drop-oldest/newest recovery policy with an explicit diagnostic.
+
 ### Benchmark artifacts
 
 The planned benchmark layout is:
@@ -500,6 +510,10 @@ Benchmarks/
 
 Fixture inputs and raw results should use JSON Lines so runs can be reproduced and re-scored. Each result must retain the source text, reference translation, model output, parsed structured response, timing, resource measurements, model metadata, and evaluator scores.
 
+Before the milestone-2 bake-off, its small fixed fixture and decision rule will be committed. The initial live-path rule is: prefer Apple Translation when it is within five chrF points of the best Ollama candidate, introduces no additional critical meaning or entity failures in targeted review, and reduces median warm translation latency by at least 50%. Ollama remains eligible for the offline quality profile even when it loses the live-path decision.
+
+Simultaneous-load testing includes an explicitly opt-in memory-oversubscription run. It must observe memory pressure, swap behavior, latency, and visible recovery without risking unrelated workloads on the host.
+
 The generated scoreboard should be available as both CSV and readable Markdown, including:
 
 - Overall and per-language scores
@@ -520,7 +534,7 @@ bfish benchmark translation \
 
 ## External Review Workflow
 
-External architecture and code reviews are stored in [`Reviews/`](Reviews/). Review files are reference inputs and remain read-only during coding sessions; development work may update project code and documentation, but must not edit, rename, or delete the original review notes.
+External architecture and code reviews are stored in [`Reviews/`](Reviews/). Only a dedicated review session has write access to this directory. Coding sessions have read-only access: they may inspect and ingest review files, but must not create, edit, rename, move, or delete anything under `Reviews/`.
 
 At the start of a new session:
 
@@ -540,6 +554,8 @@ Review recommendations are advisory. They become project decisions only after th
 - Added core domain/protocol boundaries and JSON Lines diagnostic types.
 - Implemented the initial `bfish doctor` checks.
 - Added permission metadata and local app-bundle packaging.
+- Adopted Swift Argument Parser before adding transcription and live-capture flags.
+- Added live/offline pipeline profiles, normalized Whisper language tokens, and stateful single-session orchestration.
 
 ### 2. Audio-file proof of concept
 

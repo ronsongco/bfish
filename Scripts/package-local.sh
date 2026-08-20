@@ -14,7 +14,7 @@ swift build -c "$configuration"
 mkdir -p "$contents_path/MacOS"
 cp "$binary_path" "$contents_path/MacOS/bfish"
 cp "$project_root/Resources/bfish-Info.plist" "$contents_path/Info.plist"
-version="$(<"$project_root/Sources/BFishCore/Resources/VERSION")"
+version="$($binary_path version | /usr/bin/awk '{print $2}')"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $version" "$contents_path/Info.plist"
 /usr/bin/codesign --force --options runtime --sign "$identity" "$bundle_path"
 

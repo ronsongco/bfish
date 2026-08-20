@@ -65,7 +65,7 @@ import Testing
     #expect(turns[0].sourceText == "失敗")
     #expect(turns[0].englishText == nil)
     #expect(turns[1].englishText == "continued")
-    #expect(diagnostics.map(\.event) == [.translationUnavailable])
+    #expect(diagnostics.filter { $0.event == .translationUnavailable }.count == 1)
 }
 
 @Test func pipelineSkipsNonSpeechLabelsAndBypassesEnglishTranslation() async throws {
@@ -78,7 +78,8 @@ import Testing
         RecognizedSegment(
             timeRange: try AudioTimeRange(start: 1, end: 2),
             language: .english,
-            sourceText: "Already English"
+            sourceText: "Already English",
+            languageConfidence: 0.99
         ),
     ]
     let translator = TranslatorStub()
@@ -89,6 +90,79 @@ import Testing
     #expect(turns.count == 1)
     #expect(turns[0].englishText == "Already English")
     #expect(await translator.contextCounts.isEmpty)
+}
+
+@Test func contextDoesNotSkipAnOversizedMostRecentTurn() throws {
+    let older = TranscriptTurn(
+        segment: RecognizedSegment(
+            timeRange: try AudioTimeRange(start: 0, end: 1),
+            language: .japanese,
+            sourceText: "older"
+        ),
+        englishText: "old"
+    )
+    let newest = TranscriptTurn(
+        segment: RecognizedSegment(
+            timeRange: try AudioTimeRange(start: 1, end: 2),
+            language: .japanese,
+            sourceText: String(repeating: "長", count: 101)
+        ),
+        englishText: nil
+    )
+
+    let context = TranslationPipeline.boundedContext(
+        [older, newest],
+        turnLimit: 4,
+        characterLimit: 100
+    )
+
+    #expect(context.isEmpty)
+}
+
+@Test func timeoutIsClassifiedAndProducesSourceOnlyTurn() async throws {
+    let segment = RecognizedSegment(
+        timeRange: try AudioTimeRange(start: 0, end: 1),
+        language: .japanese,
+        sourceText: "待って"
+    )
+    let pipeline = TranslationPipeline(
+        recognizer: RecognizerStub(segments: [segment]),
+        translator: SlowTranslatorStub(),
+        translationTimeout: .milliseconds(10)
+    )
+
+    var events: [PipelineEvent] = []
+    for try await event in await pipeline.events(for: .file(URL(fileURLWithPath: "/tmp/example.wav"))) {
+        events.append(event)
+    }
+
+    let turns = events.compactMap { event -> TranscriptTurn? in
+        if case let .transcript(turn) = event { return turn }
+        return nil
+    }
+    let diagnostics = events.compactMap { event -> DiagnosticEvent? in
+        if case let .diagnostic(diagnostic) = event { return diagnostic }
+        return nil
+    }
+    #expect(turns.first?.englishText == nil)
+    #expect(diagnostics.first?.details?.errorCode == "translation_timeout")
+}
+
+@Test func mixedEnglishDoesNotBypassTranslation() async throws {
+    let segment = RecognizedSegment(
+        timeRange: try AudioTimeRange(start: 0, end: 1),
+        language: .english,
+        sourceText: "English at Tagalog",
+        languageConfidence: 0.99,
+        containsMixedLanguages: true
+    )
+    let translator = TranslatorStub()
+    let pipeline = TranslationPipeline(recognizer: RecognizerStub(segments: [segment]), translator: translator)
+
+    let turns = try await pipeline.process(.file(URL(fileURLWithPath: "/tmp/example.wav")))
+
+    #expect(turns.first?.englishText == "English: English at Tagalog")
+    #expect(await translator.contextCounts.count == 1)
 }
 
 private struct RecognizerStub: SpeechRecognizing {
@@ -118,4 +192,11 @@ private actor RecoveringTranslatorStub: TextTranslating {
     }
 
     private enum StubError: Error { case expected }
+}
+
+private struct SlowTranslatorStub: TextTranslating {
+    func translate(_ request: TranslationRequest) async throws -> TranslationResponse {
+        try await Task.sleep(for: .seconds(1))
+        return TranslationResponse(englishText: "late")
+    }
 }
