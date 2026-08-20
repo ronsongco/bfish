@@ -2,7 +2,7 @@
 
 Date: 2026-08-20
 
-Status: **GO after one core protocol adjustment**. The host, toolchain, package graph, and domain model are compatible with the current open-source WhisperKit SDK. No model has been downloaded by this pre-flight.
+Status: **COMPLETE**. The core result seam, isolated adapter target, mapping tests, and source-only CLI command are implemented. No speech model is downloaded by builds or tests; the first command invocation downloads one unless `--model-path` is supplied.
 
 ## Verified Environment
 
@@ -13,7 +13,7 @@ Status: **GO after one core protocol adjustment**. The host, toolchain, package 
 - 192 GiB physical memory
 - Sufficient local disk for development and accuracy models
 
-The current package resolves Swift Argument Parser 1.8.2. Argmax OSS 1.0.0 requires a compatible 1.x release, so no dependency conflict is expected.
+The package resolves Swift Argument Parser 1.8.2 and Argmax OSS 1.1.0 under the declared compatible-from-1.0.0 constraint.
 
 ## Dependency Decision
 
@@ -30,7 +30,7 @@ Use the renamed Argmax package and only its speech-recognition product:
 
 Place the framework adapter in a separate `BFishWhisperKit` target depending on `BFishCore` and `WhisperKit`. Framework types must not enter the public core domain model. The CLI will depend on this adapter target.
 
-The top-level `WhisperKit` class is not `Sendable` in 1.0.0. `WhisperKitRecognizer` will therefore be an actor that exclusively owns the SDK instance while satisfying the core `SpeechRecognizing` boundary.
+The top-level `WhisperKit` class is not `Sendable`. `WhisperKitRecognizer` is therefore an actor that exclusively owns the SDK instance while satisfying the core `SpeechRecognizing` boundary.
 
 ## File-mode Configuration
 
@@ -73,11 +73,9 @@ For automatic language selection, call WhisperKit's 30-second `detectLanguage(au
 
 Mixed-language evidence is not directly provided by the file transcription result. The first adapter will leave `containsMixedLanguages` false and will not use that field to claim code-switch detection. This limitation must be revisited before automatic English bypass is enabled for translation.
 
-## Required Core Seam
+## Implemented Core Seam
 
-`AudioTimeRange.repairing` returns a typed repair reason, but `SpeechRecognizing.transcribe` currently returns only `[RecognizedSegment]`. The adapter therefore has no route for the required `timestamp_repaired` diagnostic or recognition timings.
-
-Before implementing the adapter, change recognition to return a core-owned result such as:
+`SpeechRecognizing.transcribe` returns a core-owned `SpeechRecognitionOutput`, allowing the adapter to forward timestamp-repair diagnostics and recognition timings without leaking SDK types:
 
 ```swift
 public struct SpeechRecognitionOutput: Sendable {
@@ -87,7 +85,7 @@ public struct SpeechRecognitionOutput: Sendable {
 }
 ```
 
-The pipeline and the source-only CLI can then preserve adapter diagnostics without importing WhisperKit types. This is the only pre-flight blocker.
+The translation pipeline and source-only CLI both preserve these adapter diagnostics.
 
 ## Tests Before Model Execution
 

@@ -25,9 +25,13 @@ Added:
 - `segment_filtered` event kind
 - `segmentFilterReason` with `empty`, `annotation`, and `noLetters` values
 
-## Version 4 — current
+## Version 4
 
 Renamed the `segmentFilterReason` value `noLetters` to `noContent` after numeric utterances became valid content. No version 3 benchmark artifacts existed when this correction was made.
+
+## Version 5 — current
+
+Added the `recognition_completed` event kind so speech-recognition stage timings can travel through the same privacy-safe diagnostics stream as adapter warnings.
 
 ## Evolution Rules
 

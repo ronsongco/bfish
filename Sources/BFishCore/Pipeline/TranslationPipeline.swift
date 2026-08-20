@@ -82,8 +82,17 @@ public actor TranslationPipeline {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let segments = try await recognizer.transcribe(input, language: language)
-                    for segment in segments {
+                    let recognition = try await recognizer.transcribe(input, language: language)
+                    for diagnostic in recognition.diagnostics {
+                        continuation.yield(.diagnostic(diagnostic))
+                    }
+                    if !recognition.timings.isEmpty {
+                        continuation.yield(.diagnostic(DiagnosticEvent(
+                            event: .recognitionCompleted,
+                            timings: recognition.timings
+                        )))
+                    }
+                    for segment in recognition.segments {
                         let output = await self.handle(segment, sessionID: sessionID)
                         for event in output {
                             continuation.yield(event)

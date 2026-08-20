@@ -11,6 +11,7 @@ public struct StageTiming: Codable, Equatable, Sendable {
 }
 
 public enum DiagnosticEventKind: String, Codable, Sendable {
+    case recognitionCompleted = "recognition_completed"
     case segmentCompleted = "segment_completed"
     case translationUnavailable = "translation_unavailable"
     case translationSuppressed = "translation_suppressed"
@@ -53,7 +54,7 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 4
+    public static let currentSchemaVersion = 5
 
     public let schemaVersion: Int
     public let timestamp: Date

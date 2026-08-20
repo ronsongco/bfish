@@ -28,7 +28,23 @@ public protocol SpeechSegmenting: Sendable {
 }
 
 public protocol SpeechRecognizing: Sendable {
-    func transcribe(_ input: AudioInput, language: WhisperLanguage) async throws -> [RecognizedSegment]
+    func transcribe(_ input: AudioInput, language: WhisperLanguage) async throws -> SpeechRecognitionOutput
+}
+
+public struct SpeechRecognitionOutput: Sendable {
+    public let segments: [RecognizedSegment]
+    public let diagnostics: [DiagnosticEvent]
+    public let timings: [StageTiming]
+
+    public init(
+        segments: [RecognizedSegment],
+        diagnostics: [DiagnosticEvent] = [],
+        timings: [StageTiming] = []
+    ) {
+        self.segments = segments
+        self.diagnostics = diagnostics
+        self.timings = timings
+    }
 }
 
 public struct TranslationRequest: Sendable {

@@ -4,7 +4,7 @@
 
 The project is intended for personal use on macOS 26 or later. All speech recognition and translation should run locally after the required models have been downloaded.
 
-> **Project status:** Foundation scaffold builds and tests successfully. WhisperKit and Ollama translation integration are next.
+> **Project status:** File-mode WhisperKit transcription is integrated behind an isolated adapter and source-only CLI command. The first real-audio smoke test and translation bake-off are next.
 
 ## Goals
 
@@ -26,7 +26,7 @@ The first proof of concept will process an existing audio file. Live audio captu
 
 The repository now contains a dependency-light Swift package with:
 
-- A reusable `BFishCore` library and `bfish` executable
+- Reusable `BFishCore` and `BFishWhisperKit` libraries plus the `bfish` executable
 - Domain types for audio inputs, recognized segments, optional speaker identity, translations, and transcript turns
 - Protocol boundaries for capture, segmentation, recognition, diarization, translation, and formatting
 - A bounded-context translation pipeline
@@ -37,6 +37,14 @@ The repository now contains a dependency-light Swift package with:
 - Embedded system-audio and microphone permission descriptions
 - A local app-bundle packaging and signing script
 - Initial Swift Testing coverage
+
+Transcribe a local audio file while keeping translation out of the measurement:
+
+```console
+swift run bfish transcribe ./sample.wav --model tiny --language auto
+```
+
+The first run may download the selected model under `~/Library/Application Support/bfish/Models`. Use `--model-path` for an existing model directory and `--incremental` for bounded-memory loading of long recordings. Source transcript text is written to stdout; privacy-safe JSONL diagnostics and timings are written to stderr.
 
 Build and test the scaffold with:
 
@@ -631,7 +639,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Follow the [WhisperKit integration pre-flight](docs/whisperkit-preflight.md): first let `SpeechRecognizing` return core-owned segments, diagnostics, and timings, then add the isolated `BFishWhisperKit` adapter target and source-only `bfish transcribe` command. After file transcription is stable, run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
+Run the [WhisperKit integration pre-flight](docs/whisperkit-preflight.md)'s first real smoke test with `tiny` and a short, legally usable fixture. Verify language detection, source text, timestamps, timing JSONL, and memory behavior. After file transcription is stable, run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
 
 ## Related Projects and Prior Art
 

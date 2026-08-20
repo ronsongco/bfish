@@ -299,8 +299,8 @@ func punctuationOnlySegmentsAreFiltered(_ sourceText: String) {
 private struct RecognizerStub: SpeechRecognizing {
     let segments: [RecognizedSegment]
 
-    func transcribe(_ input: AudioInput, language: WhisperLanguage) async throws -> [RecognizedSegment] {
-        segments
+    func transcribe(_ input: AudioInput, language: WhisperLanguage) async throws -> SpeechRecognitionOutput {
+        SpeechRecognitionOutput(segments: segments)
     }
 }
 
