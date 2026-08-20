@@ -4,7 +4,7 @@
 
 The project is intended for personal use on macOS 26 or later. All speech recognition and translation should run locally after the required models have been downloaded.
 
-> **Project status:** Architecture and pre-scaffolding. No working executable exists yet.
+> **Project status:** Foundation scaffold builds and tests successfully. WhisperKit and Ollama translation integration are next.
 
 ## Goals
 
@@ -21,6 +21,40 @@ The project is intended for personal use on macOS 26 or later. All speech recogn
 The first interface will be a command-line executable named `bfish`. SwiftUI development is intentionally deferred until the audio, transcription, and translation pipeline is stable.
 
 The first proof of concept will process an existing audio file. Live audio capture and Audio Hijack integration will follow after file transcription and Ollama translation are working reliably.
+
+### Current scaffold
+
+The repository now contains a dependency-light Swift package with:
+
+- A reusable `BFishCore` library and `bfish` executable
+- Domain types for audio inputs, recognized segments, optional speaker identity, translations, and transcript turns
+- Protocol boundaries for capture, segmentation, recognition, diarization, translation, and formatting
+- A bounded-context translation pipeline
+- Translation-only model responses that keep source text authoritative in the application
+- Source-plus-English terminal formatting
+- Structured JSON Lines diagnostic events and per-stage timing types
+- A working `bfish doctor` command
+- Embedded system-audio and microphone permission descriptions
+- A local app-bundle packaging and signing script
+- Initial Swift Testing coverage
+
+Build and test the scaffold with:
+
+```console
+swift build
+swift test
+swift run bfish --help
+swift run bfish doctor
+```
+
+Create a locally signed app bundle with embedded permission metadata:
+
+```console
+Scripts/package-local.sh
+.build/artifacts/bfish.app/Contents/MacOS/bfish doctor
+```
+
+The packaging script uses ad-hoc signing by default. Set `BFISH_CODESIGN_IDENTITY` to a stable Apple Development identity before relying on persistent macOS privacy grants across rebuilds.
 
 ### Supported platform
 
@@ -48,7 +82,7 @@ Secondary languages:
 2. Spanish
 3. Italian
 
-Source-language detection should be automatic by default, with an explicit language override available when needed. Brazilian Portuguese should be identified as `pt-BR` when that distinction is available. Mandarin source text will preserve the script produced by WhisperKit.
+Source-language detection should be automatic by default, with an explicit language override available when needed. Whisper exposes Portuguese as `pt`, not a separate Brazilian Portuguese token. A `pt-BR` session designation must therefore come from explicit user configuration. Mandarin source text will preserve the script produced by WhisperKit.
 
 ## User Experience
 
@@ -90,13 +124,13 @@ Audio file, input device, system audio, or selected application
                               ↓
                  PCM normalization/resampling
                               ↓
-              Voice activity and rolling buffer
+          Voice activity and transcription quality gates
                               ↓
-          Overlapping utterance segmentation queue
+                 Bounded utterance queue
                               ↓
              WhisperKit source transcription
                               ↓
-       Boundary deduplication and sentence assembly
+        Sentence assembly and language tracking
                               ↓
        Ollama translation with bounded recent context
                               ↓
@@ -191,14 +225,16 @@ The initial policy should favor completeness during normal load. If inference fa
 
 ### Stable segmentation
 
-Fixed-duration chunks tend to cut words, repeat text, and create artificial punctuation. The planned segmenter will instead:
+Fixed-duration chunks tend to cut words, repeat text, and create artificial punctuation. The initial segmenter will favor bounded scope and measurable behavior:
 
 1. Detect speech and meaningful pauses.
 2. Maintain a rolling audio buffer.
-3. Produce utterances with a small overlap at their boundaries.
-4. Remove duplicated text created by overlapping transcription.
+3. Produce VAD-bounded utterances without overlap.
+4. Apply no-speech, confidence, repetition, and hallucination-quality checks.
 5. Assemble complete source-language sentences where possible.
 6. Send only finalized sentences to Ollama.
+
+Overlap and boundary reconciliation will be added only when golden fixtures demonstrate that the simpler approach loses meaningful speech. Any later overlap should align timestamped tokens or words rather than rely on whitespace-sensitive string matching, particularly for Japanese and Chinese.
 
 An optional later streaming mode may re-transcribe the rolling tail and commit text only after consecutive decoding passes agree. Provisional text must be visually distinct and must never be treated as final translation context.
 
@@ -220,10 +256,20 @@ WhisperKit will initially transcribe speech in the source language rather than t
 Model selection will remain configurable. The anticipated development defaults are:
 
 - `tiny` for fast development and automated tests
-- `small` as the initial quality and performance candidate
-- Larger models evaluated where hardware capacity and accuracy requirements justify them
+- `large-v3-v20240930_626MB` as the first serious multilingual accuracy baseline
+- `small` and other models retained as benchmark candidates where resource use may justify an accuracy tradeoff
 
 Whisper's direct English translation task will remain available as a future fallback and comparison baseline.
+
+Source-language detection will use a warm-up window and a stateful language tracker. Once selected, a language should remain latched until repeated contrary evidence crosses a defined threshold. Explicit user selection always overrides automatic detection.
+
+## Speaker Diarization
+
+Offline podcast and interview processing will support optional speaker diarization through SpeakerKit, which is distributed alongside WhisperKit in Argmax's open-source Swift package.
+
+Speaker identity is optional in the core transcript model so the same pipeline supports single-speaker audio, anonymous multi-speaker turns, live audio without diarization, and finalized post-processing. Initial labels will be stable and anonymous, such as `Speaker 1` and `Speaker 2`. Future CLI options may accept an expected speaker count and explicit aliases such as Host and Guest.
+
+Diarization does not identify real people automatically. Ollama must preserve the supplied speaker boundary and must never infer a speaker's name or merge separate speakers into one translated turn. Accurate real-time speaker attribution is deferred; the initial requirement applies to recorded files and post-processing.
 
 ## Local Translation with Ollama
 
@@ -245,12 +291,10 @@ The Ollama model will be configurable rather than hard-coded. A default will be 
 
 Only finalized speech segments should be submitted to Ollama. Each request may contain a small amount of recent transcript context for disambiguation, but prior context must not be retranslated or repeated.
 
-The initial implementation should use low-temperature, non-streaming, structured responses. Conceptually, Ollama will return:
+The initial implementation should use low-temperature, non-streaming, structured responses. Source text will not be echoed through the model because the application already owns the authoritative source segment. Conceptually, Ollama will return:
 
 ```json
 {
-  "source_language": "ja",
-  "source_text": "今日は天気がいいですね。",
   "english_text": "The weather is nice today."
 }
 ```
@@ -261,7 +305,9 @@ Translation prompts must instruct the model to:
 - Preserve names, numbers, tone, and meaningful uncertainty.
 - Avoid inventing text when transcription is incomplete or empty.
 - Use previous segments only to resolve ambiguity.
-- Keep source text unchanged in the structured response.
+- Return only translation-owned fields defined by the structured schema.
+
+Every Ollama request will set `keep_alive` explicitly. Cold model-load time and warm utterance latency will be measured separately.
 
 ## Audio Hijack Integration
 
@@ -336,6 +382,7 @@ Values expected to be configurable include:
 - Output format
 - Timestamp display
 - Logging verbosity
+- Ollama keep-alive duration
 
 Model files and generated caches should live outside the Git repository in Application Support or another configurable cache directory.
 
@@ -348,6 +395,7 @@ Model files and generated caches should live outside the Git repository in Appli
 - Interrupting the CLI must stop audio capture and release resources cleanly.
 - One failed segment should not necessarily terminate an otherwise healthy live session.
 - Stable device identifiers should be used internally even when the CLI accepts human-readable names.
+- Stage timing and operational events should be available as JSON Lines on standard error.
 
 ## Offline Translation Model Evaluation
 
@@ -459,12 +507,13 @@ bfish benchmark translation \
 
 ## Development Milestones
 
-### 1. Project foundation
+### 1. Project foundation — scaffold complete
 
-- Initialize the local Git repository.
-- Create the Swift package, library target, CLI target, and tests.
-- Add configuration, logging, and error conventions.
-- Implement `bfish doctor`.
+- Initialized the local Git repository.
+- Created the Swift package, library target, CLI target, and tests.
+- Added core domain/protocol boundaries and JSON Lines diagnostic types.
+- Implemented the initial `bfish doctor` checks.
+- Added permission metadata and local app-bundle packaging.
 
 ### 2. Audio-file proof of concept
 
@@ -532,7 +581,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Scaffold the Swift package and implement `bfish doctor`, then build the audio-file proof of concept before adding live capture or SwiftUI. The current host is Apple Silicon on macOS 26.4.1 with Swift 6.3.1. Only the Command Line Tools developer directory is currently selected, so full Xcode availability and selection must be resolved before WhisperKit integration is validated. Ollama is installed, but its running service and installed model list still need to be checked outside the restricted development probe.
+Integrate WhisperKit and build the audio-file transcription proof of concept, then add the schema-constrained Ollama translator. The current scaffold builds with Xcode 26.6 and Swift 6.3.3 on Apple Silicon macOS 26.4.1. The packaged `doctor` command verifies full Xcode selection, embedded permission metadata, code signing, and a reachable Ollama service with installed models.
 
 ## Related Projects and Prior Art
 

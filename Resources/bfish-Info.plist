@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>bfish</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.ronsongco.bfish</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>bfish</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>26.0</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>bfish captures selected system and application audio to produce local bilingual transcripts.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>bfish captures microphone and virtual audio-device input to produce local bilingual transcripts.</string>
+</dict>
+</plist>

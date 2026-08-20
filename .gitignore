@@ -1,0 +1,7 @@
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+Benchmarks/Runs/
+Benchmarks/Scoreboards/generated/
