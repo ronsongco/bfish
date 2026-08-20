@@ -76,7 +76,7 @@ func numericSegmentsAreMeaningfulContent(_ sourceText: String) {
 
 @Test(arguments: ["。。。", "♪", "...", "!!!"])
 func punctuationOnlySegmentsAreFiltered(_ sourceText: String) {
-    #expect(TranslationPipeline.filterReason(for: sourceText) == .noLetters)
+    #expect(TranslationPipeline.filterReason(for: sourceText) == .noContent)
 }
 
 @Test func pipelineAppliesSessionLocaleCentrally() async throws {
@@ -141,7 +141,8 @@ func punctuationOnlySegmentsAreFiltered(_ sourceText: String) {
                 language: .japanese,
                 sourceText: "turn-\(index)"
             ),
-            englishText: "english-\(index)"
+            englishText: "english-\(index)",
+            sessionLocale: nil
         )
     }
 
@@ -223,7 +224,8 @@ func punctuationOnlySegmentsAreFiltered(_ sourceText: String) {
             language: .japanese,
             sourceText: "older"
         ),
-        englishText: "old"
+        englishText: "old",
+        sessionLocale: nil
     )
     let newest = TranscriptTurn(
         segment: RecognizedSegment(
@@ -232,7 +234,8 @@ func punctuationOnlySegmentsAreFiltered(_ sourceText: String) {
             language: .japanese,
             sourceText: String(repeating: "長", count: 101)
         ),
-        englishText: nil
+        englishText: nil,
+        sessionLocale: nil
     )
 
     let context = TranslationPipeline.boundedContext(

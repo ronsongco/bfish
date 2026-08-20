@@ -516,7 +516,7 @@ Fixture inputs and raw results should use JSON Lines so runs can be reproduced a
 
 Before the milestone-2 bake-off, its small fixed fixture and decision rule will be committed. The initial live-path rule is: prefer Apple Translation when it is within five chrF points of the best Ollama candidate, introduces no additional critical meaning or entity failures in targeted review, and reduces median warm translation latency by at least 50%. Ollama remains eligible for the offline quality profile even when it loses the live-path decision.
 
-Simultaneous-load testing includes an explicitly opt-in memory-oversubscription run. It must observe memory pressure, swap behavior, latency, and visible recovery without risking unrelated workloads on the host.
+Simultaneous-load testing includes an explicitly opt-in memory-oversubscription run. That run is deliberately deferred until the live pipeline reports pending-translation depth and lag and has a bounded recovery policy; otherwise visible degradation cannot be evaluated. It must observe memory pressure, swap behavior, latency, and visible recovery without risking unrelated workloads on the host.
 
 The generated scoreboard should be available as both CSV and readable Markdown, including:
 
@@ -600,6 +600,9 @@ Review recommendations are advisory. They become project decisions only after th
 - Finalize utterances with limited overlap.
 - Suppress duplicated transcription across chunks.
 - Supply bounded context to Ollama.
+- Bound pending translations and report queue depth and oldest-segment lag.
+- Apply an explicit source-only recovery policy when live translation becomes stale.
+- Complete lag instrumentation before running the memory-oversubscription experiment.
 
 ### 7. Audio Hijack validation
 
@@ -628,7 +631,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Integrate WhisperKit and build the audio-file transcription proof of concept, then run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. The scaffold uses validated inference timestamps, a streaming/error-isolated pipeline, bounded capture contracts, privacy-safe versioned diagnostics, and separate Whisper-language and locale types. `bfish doctor --json` provides a machine-readable preflight report.
+Follow the [WhisperKit integration pre-flight](docs/whisperkit-preflight.md): first let `SpeechRecognizing` return core-owned segments, diagnostics, and timings, then add the isolated `BFishWhisperKit` adapter target and source-only `bfish transcribe` command. After file transcription is stable, run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
 
 ## Related Projects and Prior Art
 

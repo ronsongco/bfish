@@ -23,7 +23,7 @@ public enum DiagnosticEventKind: String, Codable, Sendable {
 public enum SegmentFilterReason: String, Codable, Sendable {
     case empty
     case annotation
-    case noLetters
+    case noContent
 }
 
 /// Typed diagnostic details intentionally exclude audio and transcript text.
@@ -53,7 +53,7 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 3
+    public static let currentSchemaVersion = 4
 
     public let schemaVersion: Int
     public let timestamp: Date

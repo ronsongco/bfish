@@ -249,7 +249,7 @@ public actor TranslationPipeline {
             ]
             if bracketPairs[first] == last { return .annotation }
         }
-        return trimmed.unicodeScalars.contains { CharacterSet.alphanumerics.contains($0) } ? nil : .noLetters
+        return trimmed.unicodeScalars.contains { CharacterSet.alphanumerics.contains($0) } ? nil : .noContent
     }
 
     private static func errorCode(for error: any Error) -> String {

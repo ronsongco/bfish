@@ -146,7 +146,7 @@ public struct TranscriptTurn: Codable, Equatable, Sendable, Identifiable {
     public let englishText: String?
     public let speaker: SpeakerID?
 
-    public init(segment: RecognizedSegment, englishText: String?, sessionLocale: SessionLocale? = nil) {
+    public init(segment: RecognizedSegment, englishText: String?, sessionLocale: SessionLocale?) {
         self.id = segment.id
         self.timeRange = segment.timeRange
         self.timeline = segment.timeline

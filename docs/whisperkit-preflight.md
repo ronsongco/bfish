@@ -1,0 +1,118 @@
+# WhisperKit Integration Pre-flight
+
+Date: 2026-08-20
+
+Status: **GO after one core protocol adjustment**. The host, toolchain, package graph, and domain model are compatible with the current open-source WhisperKit SDK. No model has been downloaded by this pre-flight.
+
+## Verified Environment
+
+- Apple Silicon (`arm64`)
+- macOS 26.4.1
+- Xcode 26.6 (`17F113`)
+- Swift 6.3.3
+- 192 GiB physical memory
+- Sufficient local disk for development and accuracy models
+
+The current package resolves Swift Argument Parser 1.8.2. Argmax OSS 1.0.0 requires a compatible 1.x release, so no dependency conflict is expected.
+
+## Dependency Decision
+
+Use the renamed Argmax package and only its speech-recognition product:
+
+```swift
+.package(
+    url: "https://github.com/argmaxinc/argmax-oss-swift.git",
+    from: "1.0.0"
+)
+
+.product(name: "WhisperKit", package: "argmax-oss-swift")
+```
+
+Place the framework adapter in a separate `BFishWhisperKit` target depending on `BFishCore` and `WhisperKit`. Framework types must not enter the public core domain model. The CLI will depend on this adapter target.
+
+The top-level `WhisperKit` class is not `Sendable` in 1.0.0. `WhisperKitRecognizer` will therefore be an actor that exclusively owns the SDK instance while satisfying the core `SpeechRecognizing` boundary.
+
+## File-mode Configuration
+
+- Development model: `tiny`
+- Accuracy baseline: `large-v3-v20240930_626MB`
+- Task: `.transcribe`, preserving source-language text
+- Temperature: `0`
+- Timestamps: enabled
+- Chunking: VAD
+- Long recordings: `AudioInputOptions(audioLoadingMode: .incremental)`
+- Model storage: outside the repository under Application Support, with an optional explicit model-folder override
+
+The first command will operate on audio files only:
+
+```console
+bfish transcribe <audio-file> \
+  [--model tiny] \
+  [--model-path <directory>] \
+  [--language auto|<whisper-token>] \
+  [--locale <session-locale>] \
+  [--incremental]
+```
+
+It will print timestamped source text only. Translation remains a separate follow-up so model loading, audio decoding, detection, timestamps, and transcription quality can be measured independently.
+
+## Adapter Mapping
+
+WhisperKit 1.0.0 returns an array of `TranscriptionResult`; every contained `TranscriptionSegment` maps to one `RecognizedSegment`:
+
+| WhisperKit | BFishCore |
+|---|---|
+| result `language` | validated `WhisperLanguage` |
+| segment `start`, `end` | `AudioTimeRange.repairing` |
+| segment `text` | `sourceText` |
+| `exp(avgLogprob)` clamped to `0...1` | recognition `confidence` estimate |
+| segment `noSpeechProb` | `noSpeechProbability` |
+| one value created per file invocation | required `CaptureTimeline` |
+
+For automatic language selection, call WhisperKit's 30-second `detectLanguage(audioPath:)` first. Validate the returned token, record the selected probability as `languageConfidence`, then latch that language in `DecodingOptions` for the file. An explicit language override skips detection and uses confidence `1.0`.
+
+Mixed-language evidence is not directly provided by the file transcription result. The first adapter will leave `containsMixedLanguages` false and will not use that field to claim code-switch detection. This limitation must be revisited before automatic English bypass is enabled for translation.
+
+## Required Core Seam
+
+`AudioTimeRange.repairing` returns a typed repair reason, but `SpeechRecognizing.transcribe` currently returns only `[RecognizedSegment]`. The adapter therefore has no route for the required `timestamp_repaired` diagnostic or recognition timings.
+
+Before implementing the adapter, change recognition to return a core-owned result such as:
+
+```swift
+public struct SpeechRecognitionOutput: Sendable {
+    public let segments: [RecognizedSegment]
+    public let diagnostics: [DiagnosticEvent]
+    public let timings: [StageTiming]
+}
+```
+
+The pipeline and the source-only CLI can then preserve adapter diagnostics without importing WhisperKit types. This is the only pre-flight blocker.
+
+## Tests Before Model Execution
+
+- Map valid SDK-shaped segment data into core values without loading a model.
+- Repair NaN, infinite, negative, and reversed timestamps and emit one diagnostic per repair.
+- Reject an unknown detected-language token with a clear adapter error.
+- Preserve one timeline across all chunks/results from one file.
+- Propagate `noSpeechProb`, confidence estimate, and detected-language confidence.
+- Reject non-file `AudioInput` values in the file adapter.
+
+## First Real Smoke Test
+
+After the adapter builds, allow WhisperKit to download `tiny` and transcribe one short, legally usable fixture. Record:
+
+- model download and load time
+- audio duration and loading mode
+- full pipeline time and real-time factor
+- detected language and probability
+- raw and repaired segment timestamps
+- peak memory
+
+Only after this source-transcription path is stable should the three-way translation bake-off begin.
+
+## References
+
+- [Argmax OSS Swift](https://github.com/argmaxinc/argmax-oss-swift)
+- [Argmax OSS 1.0.0 release](https://github.com/argmaxinc/argmax-oss-swift/releases/tag/v1.0.0)
+- [WhisperKit Core ML models](https://huggingface.co/argmaxinc/whisperkit-coreml)

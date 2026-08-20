@@ -18,14 +18,16 @@ Added:
 - `contextCharacterCount`
 - `timestampRepairReason`
 
-## Version 3 — current
+## Version 3
 
 Added:
 
 - `segment_filtered` event kind
 - `segmentFilterReason` with `empty`, `annotation`, and `noLetters` values
 
-The `noLetters` value is retained for schema compatibility; its implementation means that a segment contains neither Unicode letters nor Unicode numbers.
+## Version 4 — current
+
+Renamed the `segmentFilterReason` value `noLetters` to `noContent` after numeric utterances became valid content. No version 3 benchmark artifacts existed when this correction was made.
 
 ## Evolution Rules
 

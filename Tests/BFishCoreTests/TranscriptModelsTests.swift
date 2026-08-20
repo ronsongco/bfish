@@ -16,7 +16,7 @@ import Testing
         speaker: SpeakerID("Speaker 2")
     )
 
-    let turn = TranscriptTurn(segment: segment, englishText: "The weather is nice today.")
+    let turn = TranscriptTurn(segment: segment, englishText: "The weather is nice today.", sessionLocale: nil)
 
     #expect(turn.sourceText == segment.sourceText)
     #expect(turn.timeline == timeline)
@@ -32,7 +32,7 @@ import Testing
         sourceText: "こんにちは。",
         speaker: SpeakerID("Host")
     )
-    let turn = TranscriptTurn(segment: segment, englishText: "Hello.")
+    let turn = TranscriptTurn(segment: segment, englishText: "Hello.", sessionLocale: nil)
 
     let output = TerminalTranscriptFormatter().format(turn)
 
@@ -59,6 +59,8 @@ import Testing
     #expect(SessionLocale("zh-hans-cn")?.rawValue == "zh-Hans-CN")
     #expect(SessionLocale("nonsense") == nil)
     #expect(SessionLocale("pt-") == nil)
+    #expect(SessionLocale("pt-٣٣٣") == nil)
+    #expect(SessionLocale("pt-ⅢⅢⅢ") == nil)
     #expect(throws: (any Error).self) {
         try JSONDecoder().decode(SessionLocale.self, from: Data(#""invalid-locale-name""#.utf8))
     }
@@ -76,7 +78,7 @@ import Testing
 
     #expect(text.hasSuffix("\n"))
     #expect(text.contains("\"event\":\"segment_completed\""))
-    #expect(text.contains("\"schemaVersion\":3"))
+    #expect(text.contains("\"schemaVersion\":4"))
     #expect(text.contains("\"stage\":\"translation\""))
 }
 

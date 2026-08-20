@@ -57,7 +57,7 @@ public struct SessionLocale: RawRepresentable, Codable, Hashable, Sendable, Cust
         case 2, 4:
             return isASCIILetters(value)
         case 3:
-            return isASCIILetters(value) || value.allSatisfy(\.isNumber)
+            return isASCIILetters(value) || value.allSatisfy { $0.isASCII && $0.isNumber }
         case 5...8:
             return value.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
         default:
