@@ -69,6 +69,8 @@ WhisperKit 1.0.0 returns an array of `TranscriptionResult`; every contained `Tra
 | segment `noSpeechProb` | `noSpeechProbability` |
 | one value created per file invocation | required `CaptureTimeline` |
 
+WhisperKit 1.1 applies VAD and incremental-loading seek offsets to returned segment timestamps. The adapter additionally checks that segment starts remain monotonic across results and emits `timeline_discontinuity` if that invariant is violated.
+
 For automatic language selection, call WhisperKit's 30-second `detectLanguage(audioPath:)` first. Validate the returned token, record the selected probability as `languageConfidence`, then latch that language in `DecodingOptions` for the file. An explicit language override skips detection and uses confidence `1.0`.
 
 Mixed-language evidence is not directly provided by the file transcription result. The first adapter will leave `containsMixedLanguages` false and will not use that field to claim code-switch detection. This limitation must be revisited before automatic English bypass is enabled for translation.
@@ -82,10 +84,11 @@ public struct SpeechRecognitionOutput: Sendable {
     public let segments: [RecognizedSegment]
     public let diagnostics: [DiagnosticEvent]
     public let timings: [StageTiming]
+    public let metrics: SpeechRecognitionMetrics?
 }
 ```
 
-The translation pipeline and source-only CLI both preserve these adapter diagnostics.
+The translation pipeline and source-only CLI both preserve these adapter diagnostics. Recognition metrics include audio duration and wall-clock real-time factor; timings separately report model acquisition/loading, total recognition wall time, transcription wall time, and SDK stages.
 
 ## Tests Before Model Execution
 
@@ -95,6 +98,8 @@ The translation pipeline and source-only CLI both preserve these adapter diagnos
 - Preserve one timeline across all chunks/results from one file.
 - Propagate `noSpeechProb`, confidence estimate, and detected-language confidence.
 - Reject non-file `AudioInput` values in the file adapter.
+
+These model-free checks are implemented. The mapper tests also cover multiple SDK results, shared timeline identity, cross-result monotonicity reporting, Cantonese token coverage, probability repair, and missing-file rejection.
 
 ## First Real Smoke Test
 
@@ -108,6 +113,8 @@ After the adapter builds, allow WhisperKit to download `tiny` and transcribe one
 - peak memory
 
 Only after this source-transcription path is stable should the three-way translation bake-off begin.
+
+The current `--incremental` option bounds audio loading but recognition output remains batch-oriented. Incremental finalized-segment output is required before the podcast and Ollama stages so long recordings do not wait until end-of-file or retain every segment. Language confidence gating and multi-window detection are likewise deferred until smoke-test evidence is available; explicit `--language` remains the reliable override for recordings with intros or known source languages.
 
 ## References
 

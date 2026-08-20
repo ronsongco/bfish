@@ -18,6 +18,7 @@ public enum DiagnosticEventKind: String, Codable, Sendable {
     case audioChunksDropped = "audio_chunks_dropped"
     case timelineDiscontinuity = "timeline_discontinuity"
     case timestampRepaired = "timestamp_repaired"
+    case probabilityRepaired = "probability_repaired"
     case segmentFiltered = "segment_filtered"
 }
 
@@ -25,6 +26,10 @@ public enum SegmentFilterReason: String, Codable, Sendable {
     case empty
     case annotation
     case noContent
+}
+
+public enum ProbabilityRepairField: String, Codable, Sendable {
+    case noSpeechProbability = "no_speech_probability"
 }
 
 /// Typed diagnostic details intentionally exclude audio and transcript text.
@@ -35,6 +40,9 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let contextCharacterCount: Int?
     public let timestampRepairReason: TimestampRepairReason?
     public let segmentFilterReason: SegmentFilterReason?
+    public let probabilityRepairField: ProbabilityRepairField?
+    public let audioDurationSeconds: Double?
+    public let realTimeFactor: Double?
 
     public init(
         errorCode: String? = nil,
@@ -42,7 +50,10 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         promptTokenCount: Int? = nil,
         contextCharacterCount: Int? = nil,
         timestampRepairReason: TimestampRepairReason? = nil,
-        segmentFilterReason: SegmentFilterReason? = nil
+        segmentFilterReason: SegmentFilterReason? = nil,
+        probabilityRepairField: ProbabilityRepairField? = nil,
+        audioDurationSeconds: Double? = nil,
+        realTimeFactor: Double? = nil
     ) {
         self.errorCode = errorCode
         self.droppedChunkCount = droppedChunkCount
@@ -50,11 +61,14 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         self.contextCharacterCount = contextCharacterCount
         self.timestampRepairReason = timestampRepairReason
         self.segmentFilterReason = segmentFilterReason
+        self.probabilityRepairField = probabilityRepairField
+        self.audioDurationSeconds = audioDurationSeconds
+        self.realTimeFactor = realTimeFactor
     }
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 5
+    public static let currentSchemaVersion = 6
 
     public let schemaVersion: Int
     public let timestamp: Date

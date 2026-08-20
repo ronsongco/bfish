@@ -105,7 +105,7 @@ public struct WhisperLanguage: RawRepresentable, Codable, Hashable, Sendable, Cu
         "mk", "ml", "mn", "mr", "ms", "mt", "my", "ne", "nl", "nn", "no", "oc", "pa", "pl",
         "ps", "pt", "ro", "ru", "sa", "sd", "si", "sk", "sl", "sn", "so", "sq", "sr", "su",
         "sv", "sw", "ta", "te", "tg", "th", "tk", "tl", "tr", "tt", "uk", "ur", "uz", "vi",
-        "yi", "yo", "zh",
+        "yi", "yo", "yue", "zh",
     ]
 
     public static let automatic = Self(rawValue: "auto")!

@@ -35,15 +35,28 @@ public struct SpeechRecognitionOutput: Sendable {
     public let segments: [RecognizedSegment]
     public let diagnostics: [DiagnosticEvent]
     public let timings: [StageTiming]
+    public let metrics: SpeechRecognitionMetrics?
 
     public init(
         segments: [RecognizedSegment],
         diagnostics: [DiagnosticEvent] = [],
-        timings: [StageTiming] = []
+        timings: [StageTiming] = [],
+        metrics: SpeechRecognitionMetrics? = nil
     ) {
         self.segments = segments
         self.diagnostics = diagnostics
         self.timings = timings
+        self.metrics = metrics
+    }
+}
+
+public struct SpeechRecognitionMetrics: Equatable, Sendable {
+    public let audioDurationSeconds: Double
+    public let realTimeFactor: Double
+
+    public init(audioDurationSeconds: Double, realTimeFactor: Double) {
+        self.audioDurationSeconds = audioDurationSeconds
+        self.realTimeFactor = realTimeFactor
     }
 }
 

@@ -55,7 +55,10 @@ struct TranscribeCommand: AsyncParsableCommand {
         let recognizer = WhisperKitRecognizer(configuration: .init(
             model: model,
             modelFolder: modelPath.map { URL(fileURLWithPath: $0).standardizedFileURL },
-            incrementalLoading: incremental
+            incrementalLoading: incremental,
+            statusHandler: { message in
+                FileHandle.standardError.write(Data("\(message)\n".utf8))
+            }
         ))
         let output = try await recognizer.transcribe(.file(fileURL), language: whisperLanguage)
         let formatter = TerminalSourceTranscriptFormatter()
@@ -67,7 +70,16 @@ struct TranscribeCommand: AsyncParsableCommand {
             FileHandle.standardError.write(try diagnostic.jsonLine())
         }
         if !output.timings.isEmpty {
-            let timing = DiagnosticEvent(event: .recognitionCompleted, timings: output.timings)
+            let timing = DiagnosticEvent(
+                event: .recognitionCompleted,
+                timings: output.timings,
+                details: output.metrics.map {
+                    DiagnosticDetails(
+                        audioDurationSeconds: $0.audioDurationSeconds,
+                        realTimeFactor: $0.realTimeFactor
+                    )
+                }
+            )
             FileHandle.standardError.write(try timing.jsonLine())
         }
     }

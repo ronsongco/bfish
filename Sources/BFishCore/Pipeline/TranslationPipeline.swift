@@ -89,7 +89,13 @@ public actor TranslationPipeline {
                     if !recognition.timings.isEmpty {
                         continuation.yield(.diagnostic(DiagnosticEvent(
                             event: .recognitionCompleted,
-                            timings: recognition.timings
+                            timings: recognition.timings,
+                            details: recognition.metrics.map {
+                                DiagnosticDetails(
+                                    audioDurationSeconds: $0.audioDurationSeconds,
+                                    realTimeFactor: $0.realTimeFactor
+                                )
+                            }
                         )))
                     }
                     for segment in recognition.segments {
