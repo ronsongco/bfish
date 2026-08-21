@@ -40,7 +40,7 @@ Added:
 - `probability_repaired` and the typed `probabilityRepairField` detail
 - `audioDurationSeconds` and `realTimeFactor` recognition metrics
 
-## Version 7 — current
+## Version 7
 
 Added:
 
@@ -49,6 +49,10 @@ Added:
 - `confidence` as a typed probability-repair field
 
 `realTimeFactor` is end-to-end recognition wall time, including automatic language detection but excluding model acquisition and loading, divided by the source file's media duration. `whisper_transcription_wall` remains available for comparison with conventional transcription-only benchmarks. Warm recognizer reuse emits `model_status: already_resident` and omits acquisition/load timing entries rather than recording ambiguous zeroes.
+
+## Version 8 — current
+
+Added `selectedLanguage`, `languageConfidence`, and `automaticLanguageDetection` to recognition-completion details. These privacy-safe fields make the selected Whisper token and the evidence behind automatic selection available to benchmark consumers without including transcript content. WhisperKit 1.1 returns language log probabilities; `bfish` exponentiates the selected language's value and reports the resulting `0...1` confidence.
 
 ## Evolution Rules
 

@@ -57,6 +57,9 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let sdkInputAudioSeconds: Double?
     public let modelStatus: ModelStatus?
     public let progressPercentage: Int?
+    public let selectedLanguage: WhisperLanguage?
+    public let languageConfidence: Double?
+    public let automaticLanguageDetection: Bool?
 
     public init(
         errorCode: String? = nil,
@@ -70,7 +73,10 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         realTimeFactor: Double? = nil,
         sdkInputAudioSeconds: Double? = nil,
         modelStatus: ModelStatus? = nil,
-        progressPercentage: Int? = nil
+        progressPercentage: Int? = nil,
+        selectedLanguage: WhisperLanguage? = nil,
+        languageConfidence: Double? = nil,
+        automaticLanguageDetection: Bool? = nil
     ) {
         self.errorCode = errorCode
         self.droppedChunkCount = droppedChunkCount
@@ -84,11 +90,14 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         self.sdkInputAudioSeconds = sdkInputAudioSeconds
         self.modelStatus = modelStatus
         self.progressPercentage = progressPercentage
+        self.selectedLanguage = selectedLanguage
+        self.languageConfidence = languageConfidence
+        self.automaticLanguageDetection = automaticLanguageDetection
     }
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 7
+    public static let currentSchemaVersion = 8
 
     public let schemaVersion: Int
     public let timestamp: Date

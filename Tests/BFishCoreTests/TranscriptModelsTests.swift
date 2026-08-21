@@ -78,7 +78,7 @@ import Testing
 
     #expect(text.hasSuffix("\n"))
     #expect(text.contains("\"event\":\"segment_completed\""))
-    #expect(text.contains("\"schemaVersion\":7"))
+    #expect(text.contains("\"schemaVersion\":8"))
     #expect(text.contains("\"stage\":\"translation\""))
 }
 

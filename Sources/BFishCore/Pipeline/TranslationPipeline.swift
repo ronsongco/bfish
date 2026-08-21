@@ -94,7 +94,10 @@ public actor TranslationPipeline {
                                 DiagnosticDetails(
                                     audioDurationSeconds: $0.audioDurationSeconds,
                                     realTimeFactor: $0.realTimeFactor,
-                                    sdkInputAudioSeconds: $0.sdkInputAudioSeconds
+                                    sdkInputAudioSeconds: $0.sdkInputAudioSeconds,
+                                    selectedLanguage: $0.selectedLanguage,
+                                    languageConfidence: $0.languageConfidence,
+                                    automaticLanguageDetection: $0.automaticLanguageDetection
                                 )
                             }
                         )))

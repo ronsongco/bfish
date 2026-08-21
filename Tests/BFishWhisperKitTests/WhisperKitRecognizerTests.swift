@@ -103,6 +103,13 @@ import WhisperKit
     }
 }
 
+@Test func languageLogProbabilityIsConvertedToConfidence() {
+    let confidence = WhisperKitRecognizer.languageConfidence(fromLogProbability: -0.0033057074)
+    #expect(confidence != nil)
+    #expect(abs(confidence! - 0.9967) < 0.0001)
+    #expect(WhisperKitRecognizer.languageConfidence(fromLogProbability: .nan) == nil)
+}
+
 @Test func fileRecognizerRejectsMissingFileBeforeLoadingAModel() async {
     let recognizer = WhisperKitRecognizer()
     let path = "/tmp/bfish-missing-audio-fixture.wav"

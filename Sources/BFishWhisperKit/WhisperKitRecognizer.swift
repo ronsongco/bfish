@@ -109,7 +109,8 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             let detection = try await engine.detectLanguage(audioPath: audioURL.path)
             let detected = try Self.validatedDetectedLanguage(detection.language)
             language = detected
-            languageConfidence = detection.langProbs[detection.language].map(Double.init)
+            languageConfidence = detection.langProbs[detection.language]
+                .flatMap(Self.languageConfidence(fromLogProbability:))
         } else {
             language = requestedLanguage
             languageConfidence = 1
@@ -143,7 +144,10 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
         let metrics = SpeechRecognitionMetrics(
             audioDurationSeconds: audioDuration,
             sdkInputAudioSeconds: sdkInputAudioSeconds,
-            realTimeFactor: recognitionMilliseconds / 1_000 / audioDuration
+            realTimeFactor: recognitionMilliseconds / 1_000 / audioDuration,
+            selectedLanguage: language,
+            languageConfidence: languageConfidence,
+            automaticLanguageDetection: requestedLanguage == .automatic
         )
         var timings = [
             StageTiming(stage: "whisper_recognition_wall", milliseconds: recognitionMilliseconds),
@@ -220,6 +224,11 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             throw WhisperKitRecognizerError.unsupportedLanguage(rawValue)
         }
         return language
+    }
+
+    static func languageConfidence(fromLogProbability logProbability: Float) -> Double? {
+        guard logProbability.isFinite else { return nil }
+        return min(1, max(0, exp(Double(logProbability))))
     }
 
     static func audioDuration(for url: URL) throws -> Double {

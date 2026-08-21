@@ -54,11 +54,24 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
     public let audioDurationSeconds: Double
     public let sdkInputAudioSeconds: Double
     public let realTimeFactor: Double
+    public let selectedLanguage: WhisperLanguage
+    public let languageConfidence: Double?
+    public let automaticLanguageDetection: Bool
 
-    public init(audioDurationSeconds: Double, sdkInputAudioSeconds: Double, realTimeFactor: Double) {
+    public init(
+        audioDurationSeconds: Double,
+        sdkInputAudioSeconds: Double,
+        realTimeFactor: Double,
+        selectedLanguage: WhisperLanguage,
+        languageConfidence: Double?,
+        automaticLanguageDetection: Bool
+    ) {
         self.audioDurationSeconds = audioDurationSeconds
         self.sdkInputAudioSeconds = sdkInputAudioSeconds
         self.realTimeFactor = realTimeFactor
+        self.selectedLanguage = selectedLanguage
+        self.languageConfidence = languageConfidence
+        self.automaticLanguageDetection = automaticLanguageDetection
     }
 }
 
