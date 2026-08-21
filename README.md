@@ -392,7 +392,7 @@ bfish listen --translator ollama --ollama-model <model>
 bfish listen --translator whisper
 ```
 
-`Ctrl-C` should stop capture cleanly. Operational diagnostics and model-loading progress should be written to standard error so translated output on standard output can be redirected or consumed by another process.
+`Ctrl-C` should stop capture cleanly. Operational diagnostics and model-loading progress are emitted as schema-versioned JSON Lines on standard error so translated output on standard output can be redirected and the diagnostic stream remains machine-parseable.
 
 ## Configuration
 

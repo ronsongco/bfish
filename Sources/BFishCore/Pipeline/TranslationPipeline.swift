@@ -93,7 +93,8 @@ public actor TranslationPipeline {
                             details: recognition.metrics.map {
                                 DiagnosticDetails(
                                     audioDurationSeconds: $0.audioDurationSeconds,
-                                    realTimeFactor: $0.realTimeFactor
+                                    realTimeFactor: $0.realTimeFactor,
+                                    sdkInputAudioSeconds: $0.sdkInputAudioSeconds
                                 )
                             }
                         )))

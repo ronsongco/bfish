@@ -56,8 +56,17 @@ struct TranscribeCommand: AsyncParsableCommand {
             model: model,
             modelFolder: modelPath.map { URL(fileURLWithPath: $0).standardizedFileURL },
             incrementalLoading: incremental,
-            statusHandler: { message in
-                FileHandle.standardError.write(Data("\(message)\n".utf8))
+            statusHandler: { status in
+                let event = DiagnosticEvent(
+                    event: .modelStatus,
+                    details: DiagnosticDetails(
+                        modelStatus: status.diagnosticModelStatus,
+                        progressPercentage: status.progressPercentage
+                    )
+                )
+                if let line = try? event.jsonLine() {
+                    FileHandle.standardError.write(line)
+                }
             }
         ))
         let output = try await recognizer.transcribe(.file(fileURL), language: whisperLanguage)
@@ -76,7 +85,8 @@ struct TranscribeCommand: AsyncParsableCommand {
                 details: output.metrics.map {
                     DiagnosticDetails(
                         audioDurationSeconds: $0.audioDurationSeconds,
-                        realTimeFactor: $0.realTimeFactor
+                        realTimeFactor: $0.realTimeFactor,
+                        sdkInputAudioSeconds: $0.sdkInputAudioSeconds
                     )
                 }
             )

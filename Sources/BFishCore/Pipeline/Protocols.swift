@@ -52,10 +52,12 @@ public struct SpeechRecognitionOutput: Sendable {
 
 public struct SpeechRecognitionMetrics: Equatable, Sendable {
     public let audioDurationSeconds: Double
+    public let sdkInputAudioSeconds: Double
     public let realTimeFactor: Double
 
-    public init(audioDurationSeconds: Double, realTimeFactor: Double) {
+    public init(audioDurationSeconds: Double, sdkInputAudioSeconds: Double, realTimeFactor: Double) {
         self.audioDurationSeconds = audioDurationSeconds
+        self.sdkInputAudioSeconds = sdkInputAudioSeconds
         self.realTimeFactor = realTimeFactor
     }
 }

@@ -33,12 +33,22 @@ Renamed the `segmentFilterReason` value `noLetters` to `noContent` after numeric
 
 Added the `recognition_completed` event kind so speech-recognition stage timings can travel through the same privacy-safe diagnostics stream as adapter warnings.
 
-## Version 6 — current
+## Version 6
 
 Added:
 
 - `probability_repaired` and the typed `probabilityRepairField` detail
 - `audioDurationSeconds` and `realTimeFactor` recognition metrics
+
+## Version 7 — current
+
+Added:
+
+- JSONL `model_status` events with typed lifecycle state and optional integer download percentage
+- `sdkInputAudioSeconds` so SDK task duration can be compared with authoritative media duration
+- `confidence` as a typed probability-repair field
+
+`realTimeFactor` is end-to-end recognition wall time, including automatic language detection but excluding model acquisition and loading, divided by the source file's media duration. `whisper_transcription_wall` remains available for comparison with conventional transcription-only benchmarks. Warm recognizer reuse emits `model_status: already_resident` and omits acquisition/load timing entries rather than recording ambiguous zeroes.
 
 ## Evolution Rules
 

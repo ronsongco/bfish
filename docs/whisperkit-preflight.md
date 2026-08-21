@@ -88,7 +88,7 @@ public struct SpeechRecognitionOutput: Sendable {
 }
 ```
 
-The translation pipeline and source-only CLI both preserve these adapter diagnostics. Recognition metrics include audio duration and wall-clock real-time factor; timings separately report model acquisition/loading, total recognition wall time, transcription wall time, and SDK stages.
+The translation pipeline and source-only CLI both preserve these adapter diagnostics. Recognition metrics use the source file's media duration as the authoritative RTF denominator and retain WhisperKit's summed task-input duration separately for comparison. RTF includes language detection and transcription but excludes model acquisition/loading; timings separately report those phases and the underlying SDK stages. Model lifecycle and deduplicated integer download progress are also emitted as typed JSONL events on stderr.
 
 ## Tests Before Model Execution
 

@@ -67,6 +67,25 @@ import WhisperKit
     })
 }
 
+@Test func mapperReportsNonFiniteConfidenceRepair() {
+    let mapped = WhisperKitResultMapper.mapSegment(
+        start: 0,
+        end: 1,
+        text: "test",
+        averageLogProbability: .nan,
+        noSpeechProbability: 0.1,
+        language: .english,
+        languageConfidence: 1,
+        timeline: CaptureTimeline(),
+        fallbackStart: 0
+    )
+
+    #expect(mapped.segment.confidence == 0)
+    #expect(mapped.diagnostics.contains {
+        $0.event == .probabilityRepaired && $0.details?.probabilityRepairField == .confidence
+    })
+}
+
 @Test func fileRecognizerRejectsNonFileInputBeforeLoadingAModel() async {
     let recognizer = WhisperKitRecognizer()
     await #expect(throws: WhisperKitRecognizerError.unsupportedInput) {
@@ -92,5 +111,56 @@ import WhisperKit
             .file(URL(fileURLWithPath: path)),
             language: .automatic
         )
+    }
+}
+
+@Test func modelStatusesProduceParseablePrivacySafeJSONL() throws {
+    let statuses: [WhisperKitStatus] = [
+        .resolving, .downloading(percent: 42), .filesReady, .loading, .loaded, .alreadyResident,
+    ]
+
+    for status in statuses {
+        let event = DiagnosticEvent(
+            event: .modelStatus,
+            details: DiagnosticDetails(
+                modelStatus: status.diagnosticModelStatus,
+                progressPercentage: status.progressPercentage
+            )
+        )
+        let line = try event.jsonLine()
+        #expect(line.last == 0x0A)
+        _ = try JSONSerialization.jsonObject(with: line.dropLast())
+    }
+}
+
+@Test func downloadProgressSuppressesDuplicateIntegerPercentages() {
+    let received = LockedStatuses()
+    let reporter = ProgressReporter { received.append($0) }
+    let progress = Progress(totalUnitCount: 1_000)
+
+    progress.completedUnitCount = 101
+    reporter.report(progress)
+    progress.completedUnitCount = 102
+    reporter.report(progress)
+    progress.completedUnitCount = 111
+    reporter.report(progress)
+
+    #expect(received.values == [.downloading(percent: 10), .downloading(percent: 11)])
+}
+
+private final class LockedStatuses: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [WhisperKitStatus] = []
+
+    var values: [WhisperKitStatus] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ status: WhisperKitStatus) {
+        lock.lock()
+        defer { lock.unlock() }
+        storage.append(status)
     }
 }

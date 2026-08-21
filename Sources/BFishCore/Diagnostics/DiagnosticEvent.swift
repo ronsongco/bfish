@@ -11,6 +11,7 @@ public struct StageTiming: Codable, Equatable, Sendable {
 }
 
 public enum DiagnosticEventKind: String, Codable, Sendable {
+    case modelStatus = "model_status"
     case recognitionCompleted = "recognition_completed"
     case segmentCompleted = "segment_completed"
     case translationUnavailable = "translation_unavailable"
@@ -29,7 +30,17 @@ public enum SegmentFilterReason: String, Codable, Sendable {
 }
 
 public enum ProbabilityRepairField: String, Codable, Sendable {
+    case confidence
     case noSpeechProbability = "no_speech_probability"
+}
+
+public enum ModelStatus: String, Codable, Sendable {
+    case resolving
+    case downloading
+    case filesReady = "files_ready"
+    case loading
+    case loaded
+    case alreadyResident = "already_resident"
 }
 
 /// Typed diagnostic details intentionally exclude audio and transcript text.
@@ -43,6 +54,9 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let probabilityRepairField: ProbabilityRepairField?
     public let audioDurationSeconds: Double?
     public let realTimeFactor: Double?
+    public let sdkInputAudioSeconds: Double?
+    public let modelStatus: ModelStatus?
+    public let progressPercentage: Int?
 
     public init(
         errorCode: String? = nil,
@@ -53,7 +67,10 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         segmentFilterReason: SegmentFilterReason? = nil,
         probabilityRepairField: ProbabilityRepairField? = nil,
         audioDurationSeconds: Double? = nil,
-        realTimeFactor: Double? = nil
+        realTimeFactor: Double? = nil,
+        sdkInputAudioSeconds: Double? = nil,
+        modelStatus: ModelStatus? = nil,
+        progressPercentage: Int? = nil
     ) {
         self.errorCode = errorCode
         self.droppedChunkCount = droppedChunkCount
@@ -64,11 +81,14 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         self.probabilityRepairField = probabilityRepairField
         self.audioDurationSeconds = audioDurationSeconds
         self.realTimeFactor = realTimeFactor
+        self.sdkInputAudioSeconds = sdkInputAudioSeconds
+        self.modelStatus = modelStatus
+        self.progressPercentage = progressPercentage
     }
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 6
+    public static let currentSchemaVersion = 7
 
     public let schemaVersion: Int
     public let timestamp: Date
