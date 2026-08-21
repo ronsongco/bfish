@@ -119,6 +119,7 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             task: .transcribe,
             language: language.rawValue,
             detectLanguage: false,
+            skipSpecialTokens: true,
             wordTimestamps: true,
             chunkingStrategy: .vad
         )

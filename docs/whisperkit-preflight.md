@@ -103,6 +103,8 @@ These model-free checks are implemented. The mapper tests also cover multiple SD
 
 ## First Real Smoke Test
 
+Completed on 2026-08-21 with the `tiny` model and a short locally synthesized Japanese fixture. See [the smoke-test record](whisperkit-smoke-2026-08-21.md). The run verified model acquisition/loading, source transcription, monotonic timestamps, authoritative duration, RTF, and parseable JSONL diagnostics; it also exposed and led to correction of unsuppressed Whisper control tokens.
+
 After the adapter builds, allow WhisperKit to download `tiny` and transcribe one short, legally usable fixture. Record:
 
 - model download and load time
