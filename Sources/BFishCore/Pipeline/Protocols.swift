@@ -62,6 +62,7 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
     public let confidenceDistribution: ProbabilityDistributionSummary?
     public let noSpeechProbabilityDistribution: ProbabilityDistributionSummary?
     public let peakResidentMemoryBytes: UInt64?
+    public let physicalFootprintBytes: UInt64?
     public let segmentsBeyondAudioDurationCount: Int
     public let maximumTimestampOverflowSeconds: Double?
 
@@ -77,6 +78,7 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
         confidenceDistribution: ProbabilityDistributionSummary? = nil,
         noSpeechProbabilityDistribution: ProbabilityDistributionSummary? = nil,
         peakResidentMemoryBytes: UInt64? = nil,
+        physicalFootprintBytes: UInt64? = nil,
         segmentsBeyondAudioDurationCount: Int = 0,
         maximumTimestampOverflowSeconds: Double? = nil
     ) {
@@ -91,6 +93,7 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
         self.confidenceDistribution = confidenceDistribution
         self.noSpeechProbabilityDistribution = noSpeechProbabilityDistribution
         self.peakResidentMemoryBytes = peakResidentMemoryBytes
+        self.physicalFootprintBytes = physicalFootprintBytes
         self.segmentsBeyondAudioDurationCount = segmentsBeyondAudioDurationCount
         self.maximumTimestampOverflowSeconds = maximumTimestampOverflowSeconds
     }
@@ -108,6 +111,7 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
             confidenceDistribution: confidenceDistribution,
             noSpeechProbabilityDistribution: noSpeechProbabilityDistribution,
             peakResidentMemoryBytes: peakResidentMemoryBytes,
+            physicalFootprintBytes: physicalFootprintBytes,
             segmentsBeyondAudioDurationCount: segmentsBeyondAudioDurationCount,
             maximumTimestampOverflowSeconds: maximumTimestampOverflowSeconds
         )

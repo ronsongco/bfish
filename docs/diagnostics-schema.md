@@ -54,7 +54,7 @@ Added:
 
 Added `selectedLanguage`, `languageConfidence`, and `automaticLanguageDetection` to recognition-completion details. These privacy-safe fields make the selected Whisper token and the evidence behind automatic selection available to benchmark consumers without including transcript content. WhisperKit 1.1 returns language log probabilities; `bfish` exponentiates the selected language's value and reports the resulting `0...1` confidence.
 
-## Version 9 — current
+## Version 9
 
 Added privacy-safe long-form calibration details:
 
@@ -65,6 +65,12 @@ Added privacy-safe long-form calibration details:
 - `previousSegmentStartSeconds`, `currentSegmentStartSeconds`, and `segmentStartDeltaSeconds` on timeline discontinuities
 
 These fields intentionally contain no transcript text. A negative segment-start delta measures the magnitude of a detected overlap before any tolerance or timestamp-repair policy is selected.
+
+Distribution percentiles use the nearest-index estimator over sorted values: `round((count - 1) × fraction)`. This intentionally favors a stable, dependency-free calibration summary and may differ from interpolated percentiles reported by external tools.
+
+## Version 10 — current
+
+Added `physicalFootprintBytes`, obtained from Darwin's `proc_pidinfo` task information. It complements peak RSS with the macOS memory-pressure accounting needed for simultaneous WhisperKit and translation-model tests.
 
 ## Evolution Rules
 

@@ -4,12 +4,13 @@ import Testing
 @Test func normalizedCharacterErrorRateIgnoresCaseSpacingAndPunctuation() throws {
     let report = try TextErrorRateReport(
         reference: "Olá, mundo!",
-        hypothesis: "olá mundo"
+        hypothesis: "olá mundo",
+        language: .portuguese
     )
 
     #expect(report.rawCharacterErrorRate.edits > 0)
     #expect(report.normalizedCharacterErrorRate.rate == 0)
-    #expect(report.normalizedWordErrorRate.rate == 0)
+    #expect(report.normalizedWordErrorRate?.rate == 0)
 }
 
 @Test func characterErrorRateCapturesCJKSubstitutionsWithoutSegmentation() throws {
@@ -23,13 +24,30 @@ import Testing
     #expect(score.rate == 1)
 }
 
-@Test func normalizationUsesCanonicalUnicodeComposition() throws {
+@Test func normalizationUsesCompatibilityUnicodeComposition() throws {
     let score = try TextErrorRate.characterScore(
         reference: TextEvaluationNormalizer.characters("한글"),
         hypothesis: TextEvaluationNormalizer.characters("한글")
     )
 
     #expect(score.rate == 0)
+}
+
+@Test func compatibilityNormalizationFoldsJapaneseWidthVariants() throws {
+    let score = try TextErrorRate.characterScore(
+        reference: TextEvaluationNormalizer.characters("789 ABC カタカナ"),
+        hypothesis: TextEvaluationNormalizer.characters("７８９ ＡＢＣ ｶﾀｶﾅ")
+    )
+
+    #expect(score.rate == 0)
+}
+
+@Test func wordErrorRateIsUnavailableForNonWhitespaceLanguages() throws {
+    let japanese = try TextErrorRateReport(reference: "音声認識", hypothesis: "音声識別", language: .japanese)
+    let portuguese = try TextErrorRateReport(reference: "olá mundo", hypothesis: "olá", language: .portuguese)
+
+    #expect(japanese.normalizedWordErrorRate == nil)
+    #expect(portuguese.normalizedWordErrorRate != nil)
 }
 
 @Test func wordErrorRateCountsOneSubstitution() throws {

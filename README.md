@@ -587,7 +587,7 @@ Review recommendations are advisory. They become project decisions only after th
 
 - Assemble short, legally usable test fixtures for the priority languages.
 - Compare candidate WhisperKit models independently of Ollama.
-- Score raw and normalized character error rate across languages, plus normalized word error rate where whitespace tokenization is meaningful. Normalization uses Unicode NFC, case folding, and punctuation/whitespace removal; Simplified and Traditional Chinese remain distinct unless a separate explicitly labeled metric is added.
+- Score raw and normalized character error rate across languages, plus normalized word error rate where whitespace tokenization is meaningful. WER is not applicable to Japanese, Mandarin, Cantonese, Thai, Lao, or Burmese. Normalization uses Unicode NFKC, case folding, and punctuation/whitespace removal; Simplified and Traditional Chinese remain distinct unless a separate explicitly labeled metric is added.
 - Record latency, memory usage, detected language, and transcript quality.
 - Select a speech-recognition default while preserving command-line overrides.
 

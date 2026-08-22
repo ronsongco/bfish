@@ -117,4 +117,10 @@ public struct WhisperLanguage: RawRepresentable, Codable, Hashable, Sendable, Cu
     public static let tagalog = Self(rawValue: "tl")!
     public static let spanish = Self(rawValue: "es")!
     public static let italian = Self(rawValue: "it")!
+
+    /// Whisper languages for which whitespace tokenization does not produce a
+    /// meaningful word-level ASR metric.
+    public var supportsWhitespaceWordErrorRate: Bool {
+        !["auto", "ja", "zh", "yue", "th", "lo", "my"].contains(rawValue)
+    }
 }

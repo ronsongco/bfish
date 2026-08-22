@@ -81,6 +81,7 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let confidenceDistribution: ProbabilityDistributionSummary?
     public let noSpeechProbabilityDistribution: ProbabilityDistributionSummary?
     public let peakResidentMemoryBytes: UInt64?
+    public let physicalFootprintBytes: UInt64?
     public let segmentsBeyondAudioDurationCount: Int?
     public let maximumTimestampOverflowSeconds: Double?
     public let previousSegmentStartSeconds: Double?
@@ -108,6 +109,7 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         confidenceDistribution: ProbabilityDistributionSummary? = nil,
         noSpeechProbabilityDistribution: ProbabilityDistributionSummary? = nil,
         peakResidentMemoryBytes: UInt64? = nil,
+        physicalFootprintBytes: UInt64? = nil,
         segmentsBeyondAudioDurationCount: Int? = nil,
         maximumTimestampOverflowSeconds: Double? = nil,
         previousSegmentStartSeconds: Double? = nil,
@@ -134,6 +136,7 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         self.confidenceDistribution = confidenceDistribution
         self.noSpeechProbabilityDistribution = noSpeechProbabilityDistribution
         self.peakResidentMemoryBytes = peakResidentMemoryBytes
+        self.physicalFootprintBytes = physicalFootprintBytes
         self.segmentsBeyondAudioDurationCount = segmentsBeyondAudioDurationCount
         self.maximumTimestampOverflowSeconds = maximumTimestampOverflowSeconds
         self.previousSegmentStartSeconds = previousSegmentStartSeconds
@@ -143,7 +146,7 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 9
+    public static let currentSchemaVersion = 10
 
     public let schemaVersion: Int
     public let timestamp: Date

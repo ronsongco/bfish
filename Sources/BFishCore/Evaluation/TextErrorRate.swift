@@ -21,9 +21,9 @@ public struct ErrorRateScore: Codable, Equatable, Sendable {
 public struct TextErrorRateReport: Codable, Equatable, Sendable {
     public let rawCharacterErrorRate: ErrorRateScore
     public let normalizedCharacterErrorRate: ErrorRateScore
-    public let normalizedWordErrorRate: ErrorRateScore
+    public let normalizedWordErrorRate: ErrorRateScore?
 
-    public init(reference: String, hypothesis: String) throws {
+    public init(reference: String, hypothesis: String, language: WhisperLanguage) throws {
         rawCharacterErrorRate = try TextErrorRate.characterScore(
             reference: Array(reference),
             hypothesis: Array(hypothesis)
@@ -32,10 +32,14 @@ public struct TextErrorRateReport: Codable, Equatable, Sendable {
             reference: TextEvaluationNormalizer.characters(reference),
             hypothesis: TextEvaluationNormalizer.characters(hypothesis)
         )
-        normalizedWordErrorRate = try TextErrorRate.wordScore(
-            reference: TextEvaluationNormalizer.words(reference),
-            hypothesis: TextEvaluationNormalizer.words(hypothesis)
-        )
+        normalizedWordErrorRate = if language.supportsWhitespaceWordErrorRate {
+            try TextErrorRate.wordScore(
+                reference: TextEvaluationNormalizer.words(reference),
+                hypothesis: TextEvaluationNormalizer.words(hypothesis)
+            )
+        } else {
+            nil
+        }
     }
 }
 
@@ -59,7 +63,7 @@ public enum TextEvaluationNormalizer {
     }
 
     private static func canonicalText(_ text: String) -> String {
-        text.precomposedStringWithCanonicalMapping.lowercased()
+        text.precomposedStringWithCompatibilityMapping.lowercased()
     }
 }
 
