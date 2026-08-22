@@ -4,7 +4,7 @@ import Foundation
 
 final class SignalMonitor: @unchecked Sendable {
     private let signals: [Int32]
-    private let stream: AsyncStream<Int32>
+    let events: AsyncStream<Int32>
     private let continuation: AsyncStream<Int32>.Continuation
     private let sources: [DispatchSourceSignal]
     private let lock = NSLock()
@@ -13,7 +13,7 @@ final class SignalMonitor: @unchecked Sendable {
     init(signals: [Int32] = [SIGINT, SIGTERM]) {
         self.signals = signals
         var capturedContinuation: AsyncStream<Int32>.Continuation!
-        self.stream = AsyncStream { capturedContinuation = $0 }
+        self.events = AsyncStream { capturedContinuation = $0 }
         self.continuation = capturedContinuation
         self.sources = signals.map { signalNumber in
             Darwin.signal(signalNumber, SIG_IGN)
@@ -22,11 +22,6 @@ final class SignalMonitor: @unchecked Sendable {
             source.resume()
             return source
         }
-    }
-
-    func next() async -> Int32? {
-        var iterator = stream.makeAsyncIterator()
-        return await iterator.next()
     }
 
     func stop() {

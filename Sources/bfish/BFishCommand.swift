@@ -97,7 +97,9 @@ struct TranscribeCommand: AsyncParsableCommand {
                     }
                 }
                 group.addTask {
-                    if await signalMonitor.next() != nil { throw SignalInterruption() }
+                    for await _ in signalMonitor.events {
+                        throw SignalInterruption()
+                    }
                 }
                 _ = try await group.next()
                 group.cancelAll()

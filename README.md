@@ -4,7 +4,7 @@
 
 The project is intended for personal use on macOS 26 or later. All speech recognition and translation should run locally after the required models have been downloaded.
 
-> **Project status:** File-mode WhisperKit transcription now uses bounded audio staging, reconciles long-form window boundaries, and emits finalized source segments incrementally. The thin translation bake-off selected `translategemma:12b` as the provisional Ollama adapter candidate.
+> **Project status:** File-mode WhisperKit transcription now uses bounded audio staging, reconciles long-form window boundaries, and emits finalized source segments incrementally. The thin translation bake-off retained `translategemma:4b` and `12b` as provisional latency and quality candidates for a model-neutral Ollama adapter.
 
 ## Goals
 
@@ -299,7 +299,7 @@ Diarization does not identify real people automatically. Ollama must preserve th
 
 ## Local Translation
 
-[Ollama](https://ollama.com/) remains the initial local-LLM candidate for English translation and contextual cleanup. The Swift client will communicate with Ollama through its local HTTP API using `URLSession`; no Python service or third-party Swift client is required. The initial thin comparison found Apple Translation's supported language assets unavailable on the host, Whisper direct translation unsuitable with the tested model path, and `translategemma:12b` preferable to 4B after the smaller model changed a Brazilian station name. The [bake-off record](docs/translation-bakeoff-2026-08-22.md) makes 12B a provisional adapter candidate, not a final default.
+[Ollama](https://ollama.com/) remains the initial local-LLM candidate for English translation and contextual cleanup. The Swift client will communicate with Ollama through its local HTTP API using `URLSession`; no Python service or third-party Swift client is required. The initial thin comparison found Apple Translation's supported language assets not yet installed on the host and confirmed that Argmax CLI's explicit Whisper `.translate` task returned source-language text with the tested model path. `translategemma:12b` preserved all four targeted entities while 4B was faster and smaller but changed a Brazilian station name. The [bake-off record](docs/translation-bakeoff-2026-08-22.md) therefore carries both as provisional quality and latency/resource candidates, not final defaults.
 
 The default local endpoint is expected to be the following and can be overridden through configuration or `OLLAMA_HOST`:
 
@@ -319,7 +319,7 @@ Only finalized speech segments should be submitted to Ollama. Each request may c
 
 Context storage and prompt construction are bounded by turn count and by the character cost of source plus prior English text. Filtered or high-no-speech segments remain observable but never enter translation context. If the immediately preceding retained turn alone exceeds the prompt budget, older turns are not substituted because that would create a hidden conversational discontinuity. Backend-reported prompt token counts are recorded when available.
 
-The initial implementation should use low-temperature, non-streaming, structured responses. Source text will not be echoed through the model because the application already owns the authoritative source segment. Conceptually, Ollama will return:
+The initial implementation should use low-temperature, non-streaming, structured responses. Source text will not be echoed through the model because the application already owns the authoritative source segment. The production-shaped version-2 fixture and prompt are committed under [`Benchmarks/`](Benchmarks/); free-form version-1 measurements do not transfer directly to the constrained prompt. Conceptually, Ollama will return:
 
 ```json
 {
@@ -581,7 +581,7 @@ Review recommendations are advisory. They become project decisions only after th
 
 - Load a known audio file.
 - Transcribe it in the source language with WhisperKit.
-- Completed a thin three-way comparison of Whisper direct translation, Apple Translation, and Ollama.
+- Completed the Whisper-direct and Ollama portions of the thin comparison; Apple Translation remains pending one-time language-asset installation.
 - Measured warm/cold Ollama latency and verified simultaneous 12B/WhisperKit residency on the target Mac before committing to the full translation adapter.
 - Print source text and English output with timing information.
 
@@ -648,7 +648,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Bounded finalized-segment streaming and schema-v16 reconciliation are validated directly on the 65-minute MP3 fixture after one-time 16 kHz mono normalization: zero discontinuities, media overflow, surviving overlaps, or seek repairs; 4.36 seconds normalization, 5.40 seconds to first finalized segment, and RTF 0.09666. VAD detected activity in 15 uncovered boundary fragments totaling 3.17 seconds, so meaningful seam recovery remains a golden-fixture evaluation item rather than being classified as silence. `SIGINT` cancellation removes temporary audio cleanly. Exact known-hallucination phrases are shown with a warning while translation and context are suppressed; general music/noise robustness remains an evaluation task. The thin translation bake-off selected `translategemma:12b` as the provisional Ollama candidate and verified simultaneous residency with WhisperKit. The next step is the production Ollama HTTP adapter with structured output, explicit timeout/keep-alive, typed diagnostics, and source-preserving failure isolation. `bfish doctor --json` provides a machine-readable host preflight report.
+Bounded finalized-segment streaming and schema-v16 reconciliation are validated directly on the 65-minute MP3 fixture after one-time 16 kHz mono normalization: zero discontinuities, media overflow, surviving overlaps, or seek repairs; 4.36 seconds normalization, 5.40 seconds to first finalized segment, and RTF 0.09666. VAD detected activity in 15 uncovered boundary fragments totaling 3.17 seconds, so meaningful seam recovery remains a golden-fixture evaluation item rather than being classified as silence. `SIGINT` cancellation removes temporary audio cleanly. Exact known-hallucination phrases are shown with a warning while translation and context are suppressed; general music/noise robustness remains an evaluation task. The thin translation bake-off retained `translategemma:4b` and `12b` as provisional latency/resource and quality candidates and verified simultaneous residency—not active inference contention—with WhisperKit on the 192 GiB host. A verbose Argmax CLI rerun confirmed Whisper's translate task still returned Japanese. The next step is the model-neutral Ollama HTTP adapter with the version-2 structured prompt, explicit timeout/keep-alive, typed diagnostics, and source-preserving failure isolation. Apple Translation remains open pending one-time language-asset installation. `bfish doctor --json` provides a machine-readable host preflight report.
 
 ## Related Projects and Prior Art
 
