@@ -68,9 +68,13 @@ These fields intentionally contain no transcript text. A negative segment-start 
 
 Distribution percentiles use the nearest-index estimator over sorted values: `round((count - 1) × fraction)`. This intentionally favors a stable, dependency-free calibration summary and may differ from interpolated percentiles reported by external tools.
 
-## Version 10 — current
+## Version 10
 
 Added `physicalFootprintBytes`, obtained from Darwin's `proc_pidinfo` task information. It complements peak RSS with the macOS memory-pressure accounting needed for simultaneous WhisperKit and translation-model tests.
+
+## Version 11 — current
+
+Added privacy-safe `recognition_window` events. Each records the SDK result index, reported seek start, input-audio duration and end, first returned segment start, last returned segment end, and timestamp overflow beyond that result's reported input extent. These values distinguish incorrect seek offsets from decoder timestamps extending into padded audio without logging transcript content.
 
 ## Evolution Rules
 

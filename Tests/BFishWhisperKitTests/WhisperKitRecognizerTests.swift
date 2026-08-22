@@ -102,6 +102,28 @@ import WhisperKit
     })
 }
 
+@Test func windowDiagnosticExposesChunkExtentWithoutTranscriptContent() throws {
+    var timings = TranscriptionTimings(fullPipeline: 1)
+    timings.inputAudioSeconds = 20
+    let result = TranscriptionResult(
+        text: "private aggregate text",
+        segments: [TranscriptionSegment(start: 100, end: 123, text: "private segment")],
+        language: "ja",
+        timings: timings,
+        seekTime: 100
+    )
+
+    let diagnostic = WhisperKitResultMapper.windowDiagnostic(for: result, index: 4)
+    let json = String(decoding: try diagnostic.jsonLine(), as: UTF8.self)
+
+    #expect(diagnostic.event == .recognitionWindow)
+    #expect(diagnostic.details?.windowIndex == 4)
+    #expect(diagnostic.details?.windowStartSeconds == 100)
+    #expect(diagnostic.details?.windowEndSeconds == 120)
+    #expect(diagnostic.details?.windowTimestampOverflowSeconds == 3)
+    #expect(!json.contains("private"))
+}
+
 @Test func fileRecognizerRejectsNonFileInputBeforeLoadingAModel() async {
     let recognizer = WhisperKitRecognizer()
     await #expect(throws: WhisperKitRecognizerError.unsupportedInput) {

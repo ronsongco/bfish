@@ -13,6 +13,7 @@ public struct StageTiming: Codable, Equatable, Sendable {
 public enum DiagnosticEventKind: String, Codable, Sendable {
     case modelStatus = "model_status"
     case recognitionCompleted = "recognition_completed"
+    case recognitionWindow = "recognition_window"
     case segmentCompleted = "segment_completed"
     case translationUnavailable = "translation_unavailable"
     case translationSuppressed = "translation_suppressed"
@@ -87,6 +88,13 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let previousSegmentStartSeconds: Double?
     public let currentSegmentStartSeconds: Double?
     public let segmentStartDeltaSeconds: Double?
+    public let windowIndex: Int?
+    public let windowStartSeconds: Double?
+    public let windowDurationSeconds: Double?
+    public let windowEndSeconds: Double?
+    public let firstSegmentStartSeconds: Double?
+    public let lastSegmentEndSecondsInWindow: Double?
+    public let windowTimestampOverflowSeconds: Double?
 
     public init(
         errorCode: String? = nil,
@@ -114,7 +122,14 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         maximumTimestampOverflowSeconds: Double? = nil,
         previousSegmentStartSeconds: Double? = nil,
         currentSegmentStartSeconds: Double? = nil,
-        segmentStartDeltaSeconds: Double? = nil
+        segmentStartDeltaSeconds: Double? = nil,
+        windowIndex: Int? = nil,
+        windowStartSeconds: Double? = nil,
+        windowDurationSeconds: Double? = nil,
+        windowEndSeconds: Double? = nil,
+        firstSegmentStartSeconds: Double? = nil,
+        lastSegmentEndSecondsInWindow: Double? = nil,
+        windowTimestampOverflowSeconds: Double? = nil
     ) {
         self.errorCode = errorCode
         self.droppedChunkCount = droppedChunkCount
@@ -142,11 +157,18 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         self.previousSegmentStartSeconds = previousSegmentStartSeconds
         self.currentSegmentStartSeconds = currentSegmentStartSeconds
         self.segmentStartDeltaSeconds = segmentStartDeltaSeconds
+        self.windowIndex = windowIndex
+        self.windowStartSeconds = windowStartSeconds
+        self.windowDurationSeconds = windowDurationSeconds
+        self.windowEndSeconds = windowEndSeconds
+        self.firstSegmentStartSeconds = firstSegmentStartSeconds
+        self.lastSegmentEndSecondsInWindow = lastSegmentEndSecondsInWindow
+        self.windowTimestampOverflowSeconds = windowTimestampOverflowSeconds
     }
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 10
+    public static let currentSchemaVersion = 11
 
     public let schemaVersion: Int
     public let timestamp: Date

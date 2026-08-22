@@ -324,7 +324,8 @@ enum WhisperKitResultMapper {
         var fallbackStart: TimeInterval = 0
         var previousStart: TimeInterval?
 
-        for result in results {
+        for (windowIndex, result) in results.enumerated() {
+            diagnostics.append(windowDiagnostic(for: result, index: windowIndex))
             for rawSegment in result.segments {
                 let mapped = mapSegment(
                     start: Double(rawSegment.start),
@@ -362,6 +363,27 @@ enum WhisperKitResultMapper {
             segments: segments,
             diagnostics: diagnostics,
             timings: timingSummary(results)
+        )
+    }
+
+    static func windowDiagnostic(for result: TranscriptionResult, index: Int) -> DiagnosticEvent {
+        let windowStart = Double(result.seekTime ?? 0)
+        let windowDuration = result.timings.inputAudioSeconds
+        let windowEnd = windowStart + windowDuration
+        let firstSegmentStart = result.segments.map { Double($0.start) }.min()
+        let lastSegmentEnd = result.segments.map { Double($0.end) }.max()
+        let overflow = lastSegmentEnd.map { max(0, $0 - windowEnd) }
+        return DiagnosticEvent(
+            event: .recognitionWindow,
+            details: DiagnosticDetails(
+                windowIndex: index,
+                windowStartSeconds: windowStart,
+                windowDurationSeconds: windowDuration,
+                windowEndSeconds: windowEnd,
+                firstSegmentStartSeconds: firstSegmentStart,
+                lastSegmentEndSecondsInWindow: lastSegmentEnd,
+                windowTimestampOverflowSeconds: overflow
+            )
         )
     }
 
