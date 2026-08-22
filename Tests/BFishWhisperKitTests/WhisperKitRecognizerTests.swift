@@ -147,6 +147,10 @@ import WhisperKit
     #expect(metrics.removedRangeCount == 2)
     #expect(metrics.uncoveredRemovedRangeCount == 2)
     #expect(metrics.uncoveredRemovedRangeSeconds == 3)
+    #expect(metrics.uncoveredRanges == [
+        .init(start: 2, end: 4),
+        .init(start: 6.5, end: 7.5),
+    ])
 }
 
 @Test func compressedAudioIsDecodedToTemporarySeekablePCM() throws {
@@ -176,7 +180,39 @@ import WhisperKit
     #expect(prepared.temporaryURL != nil)
     #expect(prepared.normalizationMilliseconds != nil)
     #expect(decoded.fileFormat.streamDescription.pointee.mFormatID == kAudioFormatLinearPCM)
+    #expect(decoded.fileFormat.sampleRate == 16_000)
+    #expect(decoded.fileFormat.channelCount == 1)
     #expect(decoded.length > 0)
+}
+
+@Test func compressedAudioChecksTemporaryCapacityBeforeDecoding() throws {
+    let sourceURL = FileManager.default.temporaryDirectory
+        .appending(path: "bfish-test-\(UUID().uuidString).m4a")
+    defer { try? FileManager.default.removeItem(at: sourceURL) }
+    let format = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1)!
+    try autoreleasepool {
+        let compressed = try AVAudioFile(
+            forWriting: sourceURL,
+            settings: [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 16_000,
+                AVNumberOfChannelsKey: 1,
+            ]
+        )
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16_000)!
+        buffer.frameLength = 16_000
+        try compressed.write(from: buffer)
+    }
+
+    do {
+        _ = try WhisperKitRecognizer.prepareSeekableAudio(at: sourceURL, availableCapacityOverride: 0)
+        Issue.record("Expected temporary-capacity validation to fail")
+    } catch let WhisperKitRecognizerError.insufficientTemporaryStorage(required, available) {
+        #expect(required >= 64 * 1_024 * 1_024)
+        #expect(available == 0)
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
 }
 
 @Test func probabilityDistributionProvidesStableCalibrationSummary() {

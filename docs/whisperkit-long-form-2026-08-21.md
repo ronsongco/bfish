@@ -81,3 +81,20 @@ Compressed-input normalization was then moved into the adapter and the original 
 The coverage result bounds but does not semantically classify the remaining uncertainty: out-of-window decoder output is often speculative duplication or hallucination, and the fixture has no reference transcript capable of proving that all 4.57 seconds represented speech. The aggregate is small relative to the 65-minute file, while the absolute continuity, overflow, and overlap invariants remain satisfied. A future conversational golden fixture can determine whether uncovered discarded ranges correlate with meaningful words.
 
 The schema-v14 PCM and schema-v15 direct-MP3 segment counts are also not a duplicate-removal comparison. The automatic decoder preserved the MP3's native channel/rate representation in temporary PCM, whereas the earlier manual fixture was downmixed and resampled with `ffmpeg`; that difference can change VAD boundaries and decoder segmentation.
+
+## Schema-v16 normalized-input and VAD validation
+
+The adapter now converts compressed input once to 16 kHz mono, 16-bit PCM and checks temporary-volume capacity before writing. A real `SIGINT` during the 65-minute file's normalization canceled the structured transcription task, exited successfully, and left no `bfish-*.caf` temporary file. The 8:39 MP3 then completed with 616ms normalization, 1.97 seconds to first finalized segment, and no leaked temporary file.
+
+The definitive 65-minute run reported:
+
+- 4.36 seconds normalization and 5.40 seconds to first finalized segment
+- 377.54 seconds recognition wall time including normalization, RTF 0.09666
+- 177 windows, 1,571 recognized segments, five centrally filtered segments, zero discontinuities, zero overflow, zero overlaps, and zero seek repairs
+- 39 wholly out-of-window removals; 22 had uncovered fragments totaling 4.31 seconds
+- 15 uncovered fragments crossed the staging VAD threshold, totaling 3.17 seconds
+- 194.1 MiB peak RSS and 91.8 MiB physical footprint
+
+The VAD result rejects the simple claim that all uncovered decoder overshoot occurred in silence. It still does not prove that 3.17 seconds of intelligible speech were lost: VAD also responds to boundary fragments, breathing, music, and other energetic audio, and the out-of-window timestamps are themselves decoder output. Reconciliation remains temporally stable, but meaningful-content recovery at window seams stays an explicit golden-fixture evaluation item rather than a closed finding.
+
+The v16 segment count should not be compared mechanically with earlier runs. Although both the manual and automatic paths target 16 kHz mono PCM, Core Audio and `ffmpeg` can differ in downmix, resampling, priming, and rounding behavior, which can alter VAD boundaries.

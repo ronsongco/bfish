@@ -94,7 +94,7 @@ Added:
 
 Known hallucination phrases are now quarantined rather than deleted: the source turn remains visible with `suspected_hallucination`, while translation and context retention are suppressed. The existing `knownHallucination` filter reason remains decodable for schema-v13 artifacts but is no longer emitted by the current pipeline.
 
-## Version 15 — current
+## Version 15
 
 Added privacy-safe reconciliation coverage metrics to `recognition_completed`:
 
@@ -105,6 +105,12 @@ Added privacy-safe reconciliation coverage metrics to `recognition_completed`:
 Internal gaps are measured between retained segment time ranges and exclude the initial and trailing media regions. Removed-range coverage compares wholly out-of-window decoder ranges against the union of retained segment ranges after clipping both to authoritative media duration. These aggregates contain no transcript or audio content.
 
 Compressed inputs are decoded sequentially into a private temporary linear-PCM file before incremental seeking. `audio_normalization_wall` records that preprocessing cost when normalization occurs; linear-PCM inputs omit the timing rather than reporting zero.
+
+## Version 16 — current
+
+Added `uncoveredRemovedRangesWithVoiceCount` and `uncoveredRemovedRangesWithVoiceSeconds`. After reconciliation, the adapter applies the same voice-activity detector used for chunk staging to uncovered portions of wholly out-of-window decoder ranges. These fields report how many uncovered fragments crossed the VAD threshold and their combined duration. Voice activity is supporting evidence, not proof of intelligible speech or content loss.
+
+Compressed inputs are now normalized once to 16 kHz mono, 16-bit PCM. Before writing, the adapter estimates the output size and requires the temporary volume to have that capacity plus a 10% or 64 MiB safety margin, whichever is larger. Insufficient capacity produces a typed error before decoding begins.
 
 ## Evolution Rules
 

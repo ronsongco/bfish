@@ -107,6 +107,8 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
     public let removedRangeCount: Int
     public let uncoveredRemovedRangeCount: Int
     public let uncoveredRemovedRangeSeconds: Double
+    public let uncoveredRemovedRangesWithVoiceCount: Int?
+    public let uncoveredRemovedRangesWithVoiceSeconds: Double?
 
     public init(
         audioDurationSeconds: Double,
@@ -132,7 +134,9 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
         trailingGapSeconds: Double = 0,
         removedRangeCount: Int = 0,
         uncoveredRemovedRangeCount: Int = 0,
-        uncoveredRemovedRangeSeconds: Double = 0
+        uncoveredRemovedRangeSeconds: Double = 0,
+        uncoveredRemovedRangesWithVoiceCount: Int? = nil,
+        uncoveredRemovedRangesWithVoiceSeconds: Double? = nil
     ) {
         self.audioDurationSeconds = audioDurationSeconds
         self.sdkInputAudioSeconds = sdkInputAudioSeconds
@@ -158,6 +162,8 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
         self.removedRangeCount = removedRangeCount
         self.uncoveredRemovedRangeCount = uncoveredRemovedRangeCount
         self.uncoveredRemovedRangeSeconds = uncoveredRemovedRangeSeconds
+        self.uncoveredRemovedRangesWithVoiceCount = uncoveredRemovedRangesWithVoiceCount
+        self.uncoveredRemovedRangesWithVoiceSeconds = uncoveredRemovedRangesWithVoiceSeconds
     }
 
     public var diagnosticDetails: DiagnosticDetails {
@@ -185,7 +191,9 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
             trailingGapSeconds: trailingGapSeconds,
             removedRangeCount: removedRangeCount,
             uncoveredRemovedRangeCount: uncoveredRemovedRangeCount,
-            uncoveredRemovedRangeSeconds: uncoveredRemovedRangeSeconds
+            uncoveredRemovedRangeSeconds: uncoveredRemovedRangeSeconds,
+            uncoveredRemovedRangesWithVoiceCount: uncoveredRemovedRangesWithVoiceCount,
+            uncoveredRemovedRangesWithVoiceSeconds: uncoveredRemovedRangesWithVoiceSeconds
         )
     }
 }

@@ -54,7 +54,7 @@ bfish transcribe <audio-file> \
   [--incremental]
 ```
 
-Linear-PCM files are read directly. Compressed files are first decoded sequentially to a private temporary PCM file, which is removed at session termination. This prevents repeated `AVAudioFile` seeks from raising an Objective-C Core Audio exception that Swift cannot catch. Diagnostics include `audio_normalization_wall` only when this path is used.
+Linear-PCM files are read directly. Compressed files are first decoded sequentially to a private temporary 16 kHz mono, 16-bit PCM file, which is removed at session termination. The adapter validates temporary-volume capacity with a safety margin before writing. This prevents repeated `AVAudioFile` seeks from raising an Objective-C Core Audio exception that Swift cannot catch. Diagnostics include `audio_normalization_wall` only when this path is used.
 
 It will print timestamped source text only. Translation remains a separate follow-up so model loading, audio decoding, detection, timestamps, and transcription quality can be measured independently.
 

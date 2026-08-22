@@ -3,6 +3,8 @@ import BFishCore
 import BFishWhisperKit
 import Foundation
 
+private struct SignalInterruption: Error {}
+
 @main
 struct BFishCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -76,19 +78,34 @@ struct TranscribeCommand: AsyncParsableCommand {
             sessionLocale: sessionLocale
         )
         let formatter = TerminalSourceTranscriptFormatter()
+        let signalMonitor = SignalMonitor()
+        defer { signalMonitor.stop() }
 
-        for try await event in await pipeline.events(for: .file(fileURL), language: whisperLanguage) {
-            switch event {
-            case let .transcript(turn):
-                write(formatter.format(turn) + "\n\n", to: .standardOutput)
-            case let .diagnostic(diagnostic):
-                FileHandle.standardError.write(try diagnostic.jsonLine())
+        do {
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    for try await event in await pipeline.events(
+                        for: .file(fileURL),
+                        language: whisperLanguage
+                    ) {
+                        switch event {
+                        case let .transcript(turn):
+                            FileHandle.standardOutput.write(Data((formatter.format(turn) + "\n\n").utf8))
+                        case let .diagnostic(diagnostic):
+                            FileHandle.standardError.write(try diagnostic.jsonLine())
+                        }
+                    }
+                }
+                group.addTask {
+                    if await signalMonitor.next() != nil { throw SignalInterruption() }
+                }
+                _ = try await group.next()
+                group.cancelAll()
+                try await group.waitForAll()
             }
+        } catch is SignalInterruption {
+            return
         }
-    }
-
-    private func write(_ string: String, to handle: FileHandle) {
-        handle.write(Data(string.utf8))
     }
 }
 

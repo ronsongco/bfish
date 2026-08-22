@@ -44,7 +44,7 @@ Transcribe a local audio file while keeping translation out of the measurement:
 swift run bfish transcribe ./sample.wav --model tiny --language auto
 ```
 
-Compressed inputs such as MP3 are accepted. Before incremental seeking, `bfish` decodes them sequentially into a private temporary linear-PCM file and removes it when recognition completes or fails. This avoids uncatchable AVFoundation failures caused by seeking directly inside some compressed files. The one-time normalization cost is reported as `audio_normalization_wall` in diagnostic JSONL.
+Compressed inputs such as MP3 are accepted. Before incremental seeking, `bfish` decodes them sequentially into a private temporary 16 kHz mono, 16-bit PCM file and removes it when recognition completes, fails, or is interrupted. Available temporary storage is checked first with a safety margin. This avoids uncatchable AVFoundation failures caused by seeking directly inside some compressed files. The one-time normalization cost is reported as `audio_normalization_wall` in diagnostic JSONL.
 
 The first run may download the selected model under `~/Library/Application Support/bfish/Models`. Use `--model-path` for an existing model directory. File transcription now always uses bounded audio staging and finalized-segment output; `--incremental` remains temporarily as a compatibility flag. Source transcript text is written to stdout as windows complete; privacy-safe JSONL diagnostics and timings are written to stderr.
 
@@ -648,7 +648,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Bounded finalized-segment streaming and schema-v15 reconciliation are validated directly on the 65-minute MP3 fixture: 1,603 segments, zero discontinuities, zero media overflow, zero surviving temporal overlaps, 4.41 seconds of automatic audio normalization, 7.03 seconds to first finalized segment including normalization, and RTF 0.09738. The 15.88-second final shortfall is one trailing media region; 24 discarded out-of-window decoder ranges lacked retained timestamp coverage, totaling 4.57 seconds across the file. Exact known-hallucination phrases are shown with a warning while translation and context are suppressed; general music/noise robustness remains an evaluation task. The next planned experiment is the thin three-way translation and simultaneous-load bake-off, but it is intentionally paused after this correction pass. `bfish doctor --json` provides a machine-readable host preflight report.
+Bounded finalized-segment streaming and schema-v16 reconciliation are validated directly on the 65-minute MP3 fixture after one-time 16 kHz mono normalization: zero discontinuities, media overflow, surviving overlaps, or seek repairs; 4.36 seconds normalization, 5.40 seconds to first finalized segment, and RTF 0.09666. VAD detected activity in 15 uncovered boundary fragments totaling 3.17 seconds, so meaningful seam recovery remains a golden-fixture evaluation item rather than being classified as silence. `SIGINT` cancellation removes temporary audio cleanly. Exact known-hallucination phrases are shown with a warning while translation and context are suppressed; general music/noise robustness remains an evaluation task. The next step is the thin three-way translation and simultaneous-load bake-off. `bfish doctor --json` provides a machine-readable host preflight report.
 
 ## Related Projects and Prior Art
 

@@ -122,6 +122,8 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let removedRangeCount: Int?
     public let uncoveredRemovedRangeCount: Int?
     public let uncoveredRemovedRangeSeconds: Double?
+    public let uncoveredRemovedRangesWithVoiceCount: Int?
+    public let uncoveredRemovedRangesWithVoiceSeconds: Double?
 
     public init(
         errorCode: String? = nil,
@@ -172,7 +174,9 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         trailingGapSeconds: Double? = nil,
         removedRangeCount: Int? = nil,
         uncoveredRemovedRangeCount: Int? = nil,
-        uncoveredRemovedRangeSeconds: Double? = nil
+        uncoveredRemovedRangeSeconds: Double? = nil,
+        uncoveredRemovedRangesWithVoiceCount: Int? = nil,
+        uncoveredRemovedRangesWithVoiceSeconds: Double? = nil
     ) {
         self.errorCode = errorCode
         self.droppedChunkCount = droppedChunkCount
@@ -223,11 +227,13 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         self.removedRangeCount = removedRangeCount
         self.uncoveredRemovedRangeCount = uncoveredRemovedRangeCount
         self.uncoveredRemovedRangeSeconds = uncoveredRemovedRangeSeconds
+        self.uncoveredRemovedRangesWithVoiceCount = uncoveredRemovedRangesWithVoiceCount
+        self.uncoveredRemovedRangesWithVoiceSeconds = uncoveredRemovedRangesWithVoiceSeconds
     }
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 15
+    public static let currentSchemaVersion = 16
 
     public let schemaVersion: Int
     public let timestamp: Date
