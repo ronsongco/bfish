@@ -646,7 +646,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Validate schema-v12 window-bounded reconciliation on the 65-minute fixture; the 9-minute repeat removed its duplicated out-of-window segment and eliminated the timeline discontinuity. Schema-v13 exact known-hallucination filtering now blocks the observed silence and tonal failures, while general music/noise robustness remains an evaluation task. Next, measure isolated 3–8 second utterance latency and implement true finalized-segment streaming. After file transcription is stable, run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
+Validate schema-v12 window-bounded reconciliation on the 65-minute fixture; the 9-minute repeat removed its duplicated out-of-window segment and eliminated the timeline discontinuity. Schema-v13 exact known-hallucination filtering blocks the observed silence and tonal failures, while general music/noise robustness remains an evaluation task. Isolated 3–8 second large-v3 utterances complete recognition in 0.86–1.22 seconds on the target host. Next, implement true finalized-segment streaming, then run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
 
 ## Related Projects and Prior Art
 
