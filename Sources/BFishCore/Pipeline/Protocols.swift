@@ -61,6 +61,7 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
     public let lastSegmentEndSeconds: Double?
     public let confidenceDistribution: ProbabilityDistributionSummary?
     public let noSpeechProbabilityDistribution: ProbabilityDistributionSummary?
+    public let compressionRatioDistribution: ProbabilityDistributionSummary?
     public let peakResidentMemoryBytes: UInt64?
     public let physicalFootprintBytes: UInt64?
     public let segmentsBeyondAudioDurationCount: Int
@@ -77,6 +78,7 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
         lastSegmentEndSeconds: Double? = nil,
         confidenceDistribution: ProbabilityDistributionSummary? = nil,
         noSpeechProbabilityDistribution: ProbabilityDistributionSummary? = nil,
+        compressionRatioDistribution: ProbabilityDistributionSummary? = nil,
         peakResidentMemoryBytes: UInt64? = nil,
         physicalFootprintBytes: UInt64? = nil,
         segmentsBeyondAudioDurationCount: Int = 0,
@@ -92,6 +94,7 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
         self.lastSegmentEndSeconds = lastSegmentEndSeconds
         self.confidenceDistribution = confidenceDistribution
         self.noSpeechProbabilityDistribution = noSpeechProbabilityDistribution
+        self.compressionRatioDistribution = compressionRatioDistribution
         self.peakResidentMemoryBytes = peakResidentMemoryBytes
         self.physicalFootprintBytes = physicalFootprintBytes
         self.segmentsBeyondAudioDurationCount = segmentsBeyondAudioDurationCount
@@ -110,6 +113,7 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
             lastSegmentEndSeconds: lastSegmentEndSeconds,
             confidenceDistribution: confidenceDistribution,
             noSpeechProbabilityDistribution: noSpeechProbabilityDistribution,
+            compressionRatioDistribution: compressionRatioDistribution,
             peakResidentMemoryBytes: peakResidentMemoryBytes,
             physicalFootprintBytes: physicalFootprintBytes,
             segmentsBeyondAudioDurationCount: segmentsBeyondAudioDurationCount,

@@ -118,6 +118,8 @@ Only after this source-transcription path is stable should the three-way transla
 
 The current `--incremental` option bounds audio loading but recognition output remains batch-oriented. Incremental finalized-segment output is required before the podcast and Ollama stages so long recordings do not wait until end-of-file or retain every segment. Language confidence gating and multi-window detection are likewise deferred until smoke-test evidence is available; explicit `--language` remains the reliable override for recordings with intros or known source languages.
 
+Under WhisperKit 1.1's VAD chunking, real speech, digital silence, and tonal non-speech all returned `noSpeechProbability = 0`; the pipeline therefore does not treat that value as its only hallucination safeguard. It additionally blocks exact known multilingual silence-hallucination phrases and segments with pathological compression ratio. Music, silence, confidence, and compression metrics remain benchmark dimensions because a finite blocklist cannot establish general hallucination safety.
+
 ## References
 
 - [Argmax OSS Swift](https://github.com/argmaxinc/argmax-oss-swift)

@@ -109,6 +109,7 @@ public struct RecognizedSegment: Codable, Equatable, Sendable, Identifiable {
     public let confidence: Double?
     public let languageConfidence: Double?
     public let noSpeechProbability: Double?
+    public let compressionRatio: Double?
     public let containsMixedLanguages: Bool
 
     public init(
@@ -121,6 +122,7 @@ public struct RecognizedSegment: Codable, Equatable, Sendable, Identifiable {
         confidence: Double? = nil,
         languageConfidence: Double? = nil,
         noSpeechProbability: Double? = nil,
+        compressionRatio: Double? = nil,
         containsMixedLanguages: Bool = false
     ) {
         self.id = id
@@ -132,6 +134,7 @@ public struct RecognizedSegment: Codable, Equatable, Sendable, Identifiable {
         self.confidence = confidence
         self.languageConfidence = languageConfidence
         self.noSpeechProbability = noSpeechProbability
+        self.compressionRatio = compressionRatio
         self.containsMixedLanguages = containsMixedLanguages
     }
 }

@@ -76,9 +76,13 @@ Added `physicalFootprintBytes`, obtained from Darwin's `proc_pidinfo` task infor
 
 Added privacy-safe `recognition_window` events. Each records the SDK result index, reported seek start, input-audio duration and end, first returned segment start, last returned segment end, and timestamp overflow beyond that result's reported input extent. These values distinguish incorrect seek offsets from decoder timestamps extending into padded audio without logging transcript content.
 
-## Version 12 — current
+## Version 12
 
 Added `segment_reconciled` with typed reasons for content outside its authoritative recognition window, word-timestamp trimming, timestamp clipping, and duplicate overlapping text. Reconciliation diagnostics record only counts and time ranges, never removed text. Result windows are processed by absolute seek time, timestamps are bounded to their SDK-reported input extent, and exact cross-window duplicates must overlap in media time before removal.
+
+## Version 13 — current
+
+Added aggregate `compressionRatioDistribution` and the `knownHallucination` and `repetitive` segment-filter reasons. Exact multilingual variants of Whisper's common “thanks for watching” silence hallucination are blocked before translation. Segments above the configurable compression-ratio ceiling (2.4 by default) are treated as pathological repetition.
 
 ## Evolution Rules
 

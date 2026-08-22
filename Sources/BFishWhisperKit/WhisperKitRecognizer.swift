@@ -156,6 +156,7 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             lastSegmentEndSeconds: mapped.segments.map(\.timeRange.end).max(),
             confidenceDistribution: Self.distribution(mapped.segments.compactMap(\.confidence)),
             noSpeechProbabilityDistribution: Self.distribution(mapped.segments.compactMap(\.noSpeechProbability)),
+            compressionRatioDistribution: Self.distribution(mapped.segments.compactMap(\.compressionRatio)),
             peakResidentMemoryBytes: Self.peakResidentMemoryBytes(),
             physicalFootprintBytes: Self.physicalFootprintBytes(),
             segmentsBeyondAudioDurationCount: timestampOverflows.count,
@@ -336,6 +337,7 @@ enum WhisperKitResultMapper {
                 text: rawSegment.segment.text,
                 averageLogProbability: Double(rawSegment.segment.avgLogprob),
                 noSpeechProbability: Double(rawSegment.segment.noSpeechProb),
+                compressionRatio: Double(rawSegment.segment.compressionRatio),
                 language: language,
                 languageConfidence: languageConfidence,
                 timeline: timeline,
@@ -535,6 +537,7 @@ enum WhisperKitResultMapper {
         text: String,
         averageLogProbability: Double,
         noSpeechProbability: Double,
+        compressionRatio: Double = 1,
         language: WhisperLanguage,
         languageConfidence: Double?,
         timeline: CaptureTimeline,
@@ -569,7 +572,8 @@ enum WhisperKitResultMapper {
             sourceText: text.trimmingCharacters(in: .whitespacesAndNewlines),
             confidence: repairedConfidence,
             languageConfidence: languageConfidence,
-            noSpeechProbability: repairedNoSpeechProbability
+            noSpeechProbability: repairedNoSpeechProbability,
+            compressionRatio: compressionRatio.isFinite ? max(0, compressionRatio) : nil
         )
         var diagnostics: [DiagnosticEvent] = []
         if let reason = repaired.reason {

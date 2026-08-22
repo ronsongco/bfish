@@ -29,6 +29,8 @@ public enum SegmentFilterReason: String, Codable, Sendable {
     case empty
     case annotation
     case noContent
+    case knownHallucination
+    case repetitive
 }
 
 public enum ProbabilityRepairField: String, Codable, Sendable {
@@ -89,6 +91,7 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let lastSegmentEndSeconds: Double?
     public let confidenceDistribution: ProbabilityDistributionSummary?
     public let noSpeechProbabilityDistribution: ProbabilityDistributionSummary?
+    public let compressionRatioDistribution: ProbabilityDistributionSummary?
     public let peakResidentMemoryBytes: UInt64?
     public let physicalFootprintBytes: UInt64?
     public let segmentsBeyondAudioDurationCount: Int?
@@ -130,6 +133,7 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         lastSegmentEndSeconds: Double? = nil,
         confidenceDistribution: ProbabilityDistributionSummary? = nil,
         noSpeechProbabilityDistribution: ProbabilityDistributionSummary? = nil,
+        compressionRatioDistribution: ProbabilityDistributionSummary? = nil,
         peakResidentMemoryBytes: UInt64? = nil,
         physicalFootprintBytes: UInt64? = nil,
         segmentsBeyondAudioDurationCount: Int? = nil,
@@ -170,6 +174,7 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         self.lastSegmentEndSeconds = lastSegmentEndSeconds
         self.confidenceDistribution = confidenceDistribution
         self.noSpeechProbabilityDistribution = noSpeechProbabilityDistribution
+        self.compressionRatioDistribution = compressionRatioDistribution
         self.peakResidentMemoryBytes = peakResidentMemoryBytes
         self.physicalFootprintBytes = physicalFootprintBytes
         self.segmentsBeyondAudioDurationCount = segmentsBeyondAudioDurationCount
@@ -194,7 +199,7 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 12
+    public static let currentSchemaVersion = 13
 
     public let schemaVersion: Int
     public let timestamp: Date

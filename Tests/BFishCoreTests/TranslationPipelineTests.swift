@@ -110,7 +110,7 @@ func punctuationOnlySegmentsAreFiltered(_ sourceText: String) {
             timeRange: try AudioTimeRange(start: 1, end: 2),
             timeline: testTimeline,
             language: .japanese,
-            sourceText: "ご視聴ありがとうございました",
+            sourceText: "不明な音声",
             noSpeechProbability: 0.95
         ),
         RecognizedSegment(
@@ -130,6 +130,40 @@ func punctuationOnlySegmentsAreFiltered(_ sourceText: String) {
     _ = try await pipeline.process(.file(URL(fileURLWithPath: "/tmp/example.wav")))
 
     #expect(await translator.contextSources == [[], ["最初"]])
+}
+
+@Test func knownSilenceHallucinationsAndRepetitionAreFiltered() async throws {
+    let segments = [
+        RecognizedSegment(
+            timeRange: try AudioTimeRange(start: 0, end: 1),
+            timeline: testTimeline,
+            language: .japanese,
+            sourceText: "ご視聴ありがとうございました"
+        ),
+        RecognizedSegment(
+            timeRange: try AudioTimeRange(start: 1, end: 2),
+            timeline: testTimeline,
+            language: .japanese,
+            sourceText: "繰り返し",
+            compressionRatio: 3
+        ),
+    ]
+    let pipeline = TranslationPipeline(
+        recognizer: RecognizerStub(segments: segments),
+        translator: TranslatorStub(),
+        profile: .offline
+    )
+
+    var reasons: [SegmentFilterReason] = []
+    for try await event in await pipeline.events(for: .file(URL(fileURLWithPath: "/tmp/example.wav"))) {
+        if case let .diagnostic(diagnostic) = event,
+           let reason = diagnostic.details?.segmentFilterReason
+        {
+            reasons.append(reason)
+        }
+    }
+
+    #expect(reasons == [.knownHallucination, .repetitive])
 }
 
 @Test func retainedContextHistoryIsBounded() throws {

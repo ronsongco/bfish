@@ -38,6 +38,7 @@ public actor TranslationPipeline {
     private let translationTimeout: Duration
     private let englishBypassPolicy: EnglishBypassPolicy
     private let maximumNoSpeechProbability: Double
+    private let maximumCompressionRatio: Double
     private let sessionLocale: SessionLocale?
 
     private var activeSessionID: UUID?
@@ -52,6 +53,7 @@ public actor TranslationPipeline {
         translationTimeout: Duration? = nil,
         englishBypassPolicy: EnglishBypassPolicy = .highConfidenceOnly(minimumConfidence: 0.9),
         maximumNoSpeechProbability: Double = 0.6,
+        maximumCompressionRatio: Double = 2.4,
         sessionLocale: SessionLocale? = nil
     ) {
         self.recognizer = recognizer
@@ -61,6 +63,7 @@ public actor TranslationPipeline {
         self.translationTimeout = translationTimeout ?? profile.translationTimeout
         self.englishBypassPolicy = englishBypassPolicy
         self.maximumNoSpeechProbability = min(1, max(0, maximumNoSpeechProbability))
+        self.maximumCompressionRatio = max(1, maximumCompressionRatio)
         self.sessionLocale = sessionLocale
     }
 
@@ -127,7 +130,7 @@ public actor TranslationPipeline {
 
     private func handle(_ segment: RecognizedSegment, sessionID: UUID) async -> [PipelineEvent] {
         guard activeSessionID == sessionID else { return [] }
-        if let filterReason = Self.filterReason(for: segment.sourceText) {
+        if let filterReason = Self.filterReason(for: segment, maximumCompressionRatio: maximumCompressionRatio) {
             return [.diagnostic(DiagnosticEvent(
                 event: .segmentFiltered,
                 segmentID: segment.id,
@@ -260,6 +263,40 @@ public actor TranslationPipeline {
             if bracketPairs[first] == last { return .annotation }
         }
         return trimmed.unicodeScalars.contains { CharacterSet.alphanumerics.contains($0) } ? nil : .noContent
+    }
+
+    static func filterReason(
+        for segment: RecognizedSegment,
+        maximumCompressionRatio: Double = 2.4
+    ) -> SegmentFilterReason? {
+        if let textualReason = filterReason(for: segment.sourceText) { return textualReason }
+        if knownHallucinations.contains(normalizedHallucinationText(segment.sourceText)) {
+            return .knownHallucination
+        }
+        if let ratio = segment.compressionRatio, ratio > maximumCompressionRatio {
+            return .repetitive
+        }
+        return nil
+    }
+
+    private static let knownHallucinations: Set<String> = [
+        "ご視聴ありがとうございました",
+        "ご覧いただきありがとうございました",
+        "thanksforwatching",
+        "thankyouforwatching",
+        "感谢观看",
+        "感謝觀看",
+        "시청해주셔서감사합니다",
+        "obrigadoporassistir",
+        "graciasporver",
+        "grazieperaverguardato",
+        "salamatsapanonood",
+    ]
+
+    private static func normalizedHallucinationText(_ text: String) -> String {
+        text.precomposedStringWithCompatibilityMapping
+            .lowercased()
+            .filter { !$0.isWhitespace && !$0.isPunctuation }
     }
 
     private static func errorCode(for error: any Error) -> String {

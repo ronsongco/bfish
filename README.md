@@ -242,7 +242,7 @@ Fixed-duration chunks tend to cut words, repeat text, and create artificial punc
 1. Detect speech and meaningful pauses.
 2. Maintain a rolling audio buffer.
 3. Produce VAD-bounded utterances without overlap.
-4. Apply no-speech, confidence, repetition, and hallucination-quality checks.
+4. Apply exact known-hallucination and compression-ratio repetition checks. Retain no-speech and confidence metrics for calibration; under the current VAD path they have not distinguished silence hallucinations from valid speech.
 5. Assemble complete source-language sentences where possible.
 6. Send only finalized sentences to Ollama.
 
@@ -646,7 +646,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Validate schema-v12 window-bounded reconciliation on the 65-minute fixture; the 9-minute repeat removed its duplicated out-of-window segment and eliminated the timeline discontinuity. Next, establish evidence-based silence/music gating, measure isolated 3–8 second utterance latency, and implement true finalized-segment streaming. After file transcription is stable, run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
+Validate schema-v12 window-bounded reconciliation on the 65-minute fixture; the 9-minute repeat removed its duplicated out-of-window segment and eliminated the timeline discontinuity. Schema-v13 exact known-hallucination filtering now blocks the observed silence and tonal failures, while general music/noise robustness remains an evaluation task. Next, measure isolated 3–8 second utterance latency and implement true finalized-segment streaming. After file transcription is stable, run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
 
 ## Related Projects and Prior Art
 
