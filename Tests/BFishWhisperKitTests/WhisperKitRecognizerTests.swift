@@ -34,9 +34,10 @@ import WhisperKit
     #expect(mapped.diagnostics[1].details?.probabilityRepairField == .noSpeechProbability)
 }
 
-@Test func mapperPreservesTimelineAndReportsNonMonotonicResults() {
+@Test func mapperPreservesTimelineAndOrdersNonMonotonicResults() {
     let timeline = CaptureTimeline()
-    let timings = TranscriptionTimings(fullPipeline: 1)
+    var timings = TranscriptionTimings(fullPipeline: 1)
+    timings.inputAudioSeconds = 20
     let results = [
         TranscriptionResult(
             text: "first",
@@ -61,13 +62,8 @@ import WhisperKit
 
     #expect(output.segments.count == 2)
     #expect(output.segments.allSatisfy { $0.timeline == timeline })
-    #expect(output.diagnostics.contains { diagnostic in
-        diagnostic.event == .timelineDiscontinuity
-            && diagnostic.details?.errorCode == "non_monotonic_segment_start"
-            && diagnostic.details?.previousSegmentStartSeconds == 10
-            && diagnostic.details?.currentSegmentStartSeconds == 2
-            && diagnostic.details?.segmentStartDeltaSeconds == -8
-    })
+    #expect(output.segments.map(\.timeRange.start) == [2, 10])
+    #expect(!output.diagnostics.contains { $0.event == .timelineDiscontinuity })
 }
 
 @Test func probabilityDistributionProvidesStableCalibrationSummary() {
@@ -122,6 +118,73 @@ import WhisperKit
     #expect(diagnostic.details?.windowEndSeconds == 120)
     #expect(diagnostic.details?.windowTimestampOverflowSeconds == 3)
     #expect(!json.contains("private"))
+}
+
+@Test func reconciliationUsesWindowAndWordExtentsToRemoveOverflow() {
+    var firstTimings = TranscriptionTimings(fullPipeline: 1)
+    firstTimings.inputAudioSeconds = 10
+    var secondTimings = TranscriptionTimings(fullPipeline: 1)
+    secondTimings.inputAudioSeconds = 10
+    let results = [
+        TranscriptionResult(
+            text: "kept duplicate",
+            segments: [TranscriptionSegment(
+                start: 8,
+                end: 12,
+                text: "kept duplicate",
+                words: [
+                    WordTiming(word: "kept", tokens: [1], start: 8, end: 9, probability: 0.9),
+                    WordTiming(word: "duplicate", tokens: [2], start: 10.5, end: 11.5, probability: 0.9),
+                ]
+            )],
+            language: "en",
+            timings: firstTimings,
+            seekTime: 0
+        ),
+        TranscriptionResult(
+            text: "duplicate next",
+            segments: [TranscriptionSegment(
+                start: 10.5,
+                end: 13,
+                text: "duplicate next",
+                words: [
+                    WordTiming(word: "duplicate", tokens: [2], start: 10.5, end: 11.5, probability: 0.9),
+                    WordTiming(word: "next", tokens: [3], start: 12, end: 13, probability: 0.9),
+                ]
+            )],
+            language: "en",
+            timings: secondTimings,
+            seekTime: 10
+        ),
+    ]
+
+    let reconciled = WhisperKitResultMapper.reconcile(results: results)
+
+    #expect(reconciled.segments.count == 2)
+    #expect(reconciled.segments[0].segment.text == "kept")
+    #expect(reconciled.segments[0].segment.end == 9)
+    #expect(reconciled.segments[1].segment.text == "duplicate next")
+    #expect(reconciled.diagnostics.contains {
+        $0.details?.reconciliationReason == .wordsOutsideWindow
+            && $0.details?.removedWordCount == 1
+    })
+}
+
+@Test func reconciliationDropsSegmentsWhollyOutsideTheirWindow() {
+    var timings = TranscriptionTimings(fullPipeline: 1)
+    timings.inputAudioSeconds = 10
+    let result = TranscriptionResult(
+        text: "overflow",
+        segments: [TranscriptionSegment(start: 11, end: 12, text: "overflow")],
+        language: "en",
+        timings: timings,
+        seekTime: 0
+    )
+
+    let reconciled = WhisperKitResultMapper.reconcile(results: [result])
+
+    #expect(reconciled.segments.isEmpty)
+    #expect(reconciled.diagnostics.first?.details?.reconciliationReason == .outsideWindow)
 }
 
 @Test func fileRecognizerRejectsNonFileInputBeforeLoadingAModel() async {

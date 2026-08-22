@@ -22,6 +22,7 @@ public enum DiagnosticEventKind: String, Codable, Sendable {
     case timestampRepaired = "timestamp_repaired"
     case probabilityRepaired = "probability_repaired"
     case segmentFiltered = "segment_filtered"
+    case segmentReconciled = "segment_reconciled"
 }
 
 public enum SegmentFilterReason: String, Codable, Sendable {
@@ -33,6 +34,13 @@ public enum SegmentFilterReason: String, Codable, Sendable {
 public enum ProbabilityRepairField: String, Codable, Sendable {
     case confidence
     case noSpeechProbability = "no_speech_probability"
+}
+
+public enum SegmentReconciliationReason: String, Codable, Sendable {
+    case outsideWindow = "outside_window"
+    case wordsOutsideWindow = "words_outside_window"
+    case timestampClipped = "timestamp_clipped"
+    case duplicateOverlap = "duplicate_overlap"
 }
 
 public enum ModelStatus: String, Codable, Sendable {
@@ -95,6 +103,12 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let firstSegmentStartSeconds: Double?
     public let lastSegmentEndSecondsInWindow: Double?
     public let windowTimestampOverflowSeconds: Double?
+    public let reconciliationReason: SegmentReconciliationReason?
+    public let removedWordCount: Int?
+    public let originalSegmentStartSeconds: Double?
+    public let originalSegmentEndSeconds: Double?
+    public let reconciledSegmentStartSeconds: Double?
+    public let reconciledSegmentEndSeconds: Double?
 
     public init(
         errorCode: String? = nil,
@@ -129,7 +143,13 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         windowEndSeconds: Double? = nil,
         firstSegmentStartSeconds: Double? = nil,
         lastSegmentEndSecondsInWindow: Double? = nil,
-        windowTimestampOverflowSeconds: Double? = nil
+        windowTimestampOverflowSeconds: Double? = nil,
+        reconciliationReason: SegmentReconciliationReason? = nil,
+        removedWordCount: Int? = nil,
+        originalSegmentStartSeconds: Double? = nil,
+        originalSegmentEndSeconds: Double? = nil,
+        reconciledSegmentStartSeconds: Double? = nil,
+        reconciledSegmentEndSeconds: Double? = nil
     ) {
         self.errorCode = errorCode
         self.droppedChunkCount = droppedChunkCount
@@ -164,11 +184,17 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         self.firstSegmentStartSeconds = firstSegmentStartSeconds
         self.lastSegmentEndSecondsInWindow = lastSegmentEndSecondsInWindow
         self.windowTimestampOverflowSeconds = windowTimestampOverflowSeconds
+        self.reconciliationReason = reconciliationReason
+        self.removedWordCount = removedWordCount
+        self.originalSegmentStartSeconds = originalSegmentStartSeconds
+        self.originalSegmentEndSeconds = originalSegmentEndSeconds
+        self.reconciledSegmentStartSeconds = reconciledSegmentStartSeconds
+        self.reconciledSegmentEndSeconds = reconciledSegmentEndSeconds
     }
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 11
+    public static let currentSchemaVersion = 12
 
     public let schemaVersion: Int
     public let timestamp: Date

@@ -646,7 +646,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Reconcile WhisperKit long-form chunk boundaries before treating file timestamps as presentation-safe. A 65-minute probe produced 34 backward jumps and timestamps extending 24 seconds beyond media duration, so this requires overlap-aware ordering/deduplication rather than a warning tolerance. Preserve aggregate diagnostics while implementing the correction, then verify true finalized-segment streaming. After file transcription is stable, run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
+Validate schema-v12 window-bounded reconciliation on the 65-minute fixture; the 9-minute repeat removed its duplicated out-of-window segment and eliminated the timeline discontinuity. Next, establish evidence-based silence/music gating, measure isolated 3–8 second utterance latency, and implement true finalized-segment streaming. After file transcription is stable, run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
 
 ## Related Projects and Prior Art
 

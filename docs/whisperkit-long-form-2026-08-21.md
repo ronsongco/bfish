@@ -32,3 +32,9 @@ Large-v3 batch recognition speed is viable on the target host, but it does not p
 WhisperKit's returned long-form timestamps cannot yet be presented directly. The discontinuities scale with duration and include duplicate content as well as media-duration overflow. The next adapter work must preserve global media time while reconciling overlap at result boundaries. A tolerance or blind timestamp clamp is insufficient.
 
 The current pipeline now performs the CLI's empty, annotation, and punctuation-only filtering centrally, but recognition remains batch-oriented internally. True finalized-segment streaming is still required before the hour-long fixture becomes a product-experience test.
+
+## Reconciliation validation
+
+Schema-v11 window instrumentation showed that the 9-minute discontinuity came from window 18 returning a segment at 421.20–421.68 seconds even though its authoritative input ended at 419.00 seconds. The next window began correctly at 419.00 seconds. This ruled out accumulated seek-offset drift: the decoder had emitted content beyond its VAD window.
+
+Schema-v12 reconciliation now bounds returned content to each result's reported input extent, uses word timestamps when only part of a segment crosses the boundary, orders retained segments by global media time, and removes exact cross-window text only when its time ranges overlap. The repeated real-audio probe removed the single wholly out-of-window segment, reduced output from 142 to 141 segments, produced zero timeline discontinuities, and preserved the 514.76-second final extent. The removal was recorded as a transcript-free `segment_reconciled` diagnostic.

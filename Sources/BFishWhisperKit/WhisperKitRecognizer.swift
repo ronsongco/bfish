@@ -321,48 +321,190 @@ enum WhisperKitResultMapper {
     ) -> SpeechRecognitionOutput {
         var segments: [RecognizedSegment] = []
         var diagnostics: [DiagnosticEvent] = []
+        let reconciled = reconcile(results: results)
+        diagnostics.append(contentsOf: reconciled.diagnostics)
         var fallbackStart: TimeInterval = 0
         var previousStart: TimeInterval?
 
         for (windowIndex, result) in results.enumerated() {
             diagnostics.append(windowDiagnostic(for: result, index: windowIndex))
-            for rawSegment in result.segments {
-                let mapped = mapSegment(
-                    start: Double(rawSegment.start),
-                    end: Double(rawSegment.end),
-                    text: rawSegment.text,
-                    averageLogProbability: Double(rawSegment.avgLogprob),
-                    noSpeechProbability: Double(rawSegment.noSpeechProb),
-                    language: language,
-                    languageConfidence: languageConfidence,
-                    timeline: timeline,
-                    fallbackStart: fallbackStart
-                )
-                let segment = mapped.segment
-                segments.append(segment)
-                fallbackStart = segment.timeRange.end
-                diagnostics.append(contentsOf: mapped.diagnostics)
-                if let previousStart, segment.timeRange.start < previousStart {
-                    let currentStart = segment.timeRange.start
-                    diagnostics.append(DiagnosticEvent(
-                        event: .timelineDiscontinuity,
-                        segmentID: segment.id,
-                        details: DiagnosticDetails(
-                            errorCode: "non_monotonic_segment_start",
-                            previousSegmentStartSeconds: previousStart,
-                            currentSegmentStartSeconds: currentStart,
-                            segmentStartDeltaSeconds: currentStart - previousStart
-                        )
-                    ))
-                }
-                previousStart = segment.timeRange.start
+        }
+        for rawSegment in reconciled.segments {
+            let mapped = mapSegment(
+                start: Double(rawSegment.segment.start),
+                end: Double(rawSegment.segment.end),
+                text: rawSegment.segment.text,
+                averageLogProbability: Double(rawSegment.segment.avgLogprob),
+                noSpeechProbability: Double(rawSegment.segment.noSpeechProb),
+                language: language,
+                languageConfidence: languageConfidence,
+                timeline: timeline,
+                fallbackStart: fallbackStart
+            )
+            let segment = mapped.segment
+            segments.append(segment)
+            fallbackStart = segment.timeRange.end
+            diagnostics.append(contentsOf: mapped.diagnostics)
+            if let previousStart, segment.timeRange.start < previousStart {
+                let currentStart = segment.timeRange.start
+                diagnostics.append(DiagnosticEvent(
+                    event: .timelineDiscontinuity,
+                    segmentID: segment.id,
+                    details: DiagnosticDetails(
+                        errorCode: "non_monotonic_segment_start",
+                        previousSegmentStartSeconds: previousStart,
+                        currentSegmentStartSeconds: currentStart,
+                        segmentStartDeltaSeconds: currentStart - previousStart
+                    )
+                ))
             }
+            previousStart = segment.timeRange.start
         }
 
         return SpeechRecognitionOutput(
             segments: segments,
             diagnostics: diagnostics,
             timings: timingSummary(results)
+        )
+    }
+
+    struct WindowedSegment {
+        var segment: TranscriptionSegment
+        let windowIndex: Int
+    }
+
+    static func reconcile(results: [TranscriptionResult]) -> (
+        segments: [WindowedSegment],
+        diagnostics: [DiagnosticEvent]
+    ) {
+        let tolerance = 0.001
+        var candidates: [WindowedSegment] = []
+        var diagnostics: [DiagnosticEvent] = []
+
+        for (windowIndex, result) in results.enumerated() {
+            let windowStart = Double(result.seekTime ?? 0)
+            let windowEnd = windowStart + result.timings.inputAudioSeconds
+            for source in result.segments {
+                var segment = source
+                let originalStart = Double(segment.start)
+                let originalEnd = Double(segment.end)
+                guard originalStart < windowEnd + tolerance, originalEnd > windowStart - tolerance else {
+                    diagnostics.append(reconciliationDiagnostic(
+                        reason: .outsideWindow,
+                        originalStart: originalStart,
+                        originalEnd: originalEnd
+                    ))
+                    continue
+                }
+
+                if let words = segment.words, !words.isEmpty {
+                    let retained = words.filter {
+                        Double($0.start) < windowEnd + tolerance && Double($0.end) > windowStart - tolerance
+                    }
+                    let removedCount = words.count - retained.count
+                    if removedCount > 0 {
+                        guard !retained.isEmpty else {
+                            diagnostics.append(reconciliationDiagnostic(
+                                reason: .outsideWindow,
+                                removedWordCount: removedCount,
+                                originalStart: originalStart,
+                                originalEnd: originalEnd
+                            ))
+                            continue
+                        }
+                        segment.words = retained
+                        segment.text = retained.map(\.word).joined()
+                        segment.start = Float(max(windowStart, Double(retained.first!.start)))
+                        segment.end = Float(min(windowEnd, Double(retained.last!.end)))
+                        diagnostics.append(reconciliationDiagnostic(
+                            reason: .wordsOutsideWindow,
+                            removedWordCount: removedCount,
+                            originalStart: originalStart,
+                            originalEnd: originalEnd,
+                            reconciledStart: Double(segment.start),
+                            reconciledEnd: Double(segment.end)
+                        ))
+                    }
+                }
+
+                let clippedStart = max(windowStart, Double(segment.start))
+                let clippedEnd = min(windowEnd, Double(segment.end))
+                guard clippedEnd > clippedStart else {
+                    diagnostics.append(reconciliationDiagnostic(
+                        reason: .outsideWindow,
+                        originalStart: originalStart,
+                        originalEnd: originalEnd
+                    ))
+                    continue
+                }
+                if abs(clippedStart - Double(segment.start)) > tolerance
+                    || abs(clippedEnd - Double(segment.end)) > tolerance
+                {
+                    segment.start = Float(clippedStart)
+                    segment.end = Float(clippedEnd)
+                    diagnostics.append(reconciliationDiagnostic(
+                        reason: .timestampClipped,
+                        originalStart: originalStart,
+                        originalEnd: originalEnd,
+                        reconciledStart: clippedStart,
+                        reconciledEnd: clippedEnd
+                    ))
+                }
+                candidates.append(WindowedSegment(segment: segment, windowIndex: windowIndex))
+            }
+        }
+
+        candidates.sort {
+            if $0.segment.start == $1.segment.start { return $0.windowIndex < $1.windowIndex }
+            return $0.segment.start < $1.segment.start
+        }
+        var accepted: [WindowedSegment] = []
+        for candidate in candidates {
+            if let duplicate = accepted.last(where: {
+                $0.windowIndex != candidate.windowIndex
+                    && normalizedText($0.segment.text) == normalizedText(candidate.segment.text)
+                    && candidate.segment.start < $0.segment.end
+                    && candidate.segment.end > $0.segment.start
+            }) {
+                diagnostics.append(reconciliationDiagnostic(
+                    reason: .duplicateOverlap,
+                    removedWordCount: candidate.segment.words?.count,
+                    originalStart: Double(candidate.segment.start),
+                    originalEnd: Double(candidate.segment.end),
+                    reconciledStart: Double(duplicate.segment.start),
+                    reconciledEnd: Double(duplicate.segment.end)
+                ))
+                continue
+            }
+            accepted.append(candidate)
+        }
+        return (accepted, diagnostics)
+    }
+
+    private static func normalizedText(_ text: String) -> String {
+        text.precomposedStringWithCompatibilityMapping
+            .lowercased()
+            .filter { !$0.isWhitespace && !$0.isPunctuation }
+    }
+
+    private static func reconciliationDiagnostic(
+        reason: SegmentReconciliationReason,
+        removedWordCount: Int? = nil,
+        originalStart: Double,
+        originalEnd: Double,
+        reconciledStart: Double? = nil,
+        reconciledEnd: Double? = nil
+    ) -> DiagnosticEvent {
+        DiagnosticEvent(
+            event: .segmentReconciled,
+            details: DiagnosticDetails(
+                reconciliationReason: reason,
+                removedWordCount: removedWordCount,
+                originalSegmentStartSeconds: originalStart,
+                originalSegmentEndSeconds: originalEnd,
+                reconciledSegmentStartSeconds: reconciledStart,
+                reconciledSegmentEndSeconds: reconciledEnd
+            )
         )
     }
 

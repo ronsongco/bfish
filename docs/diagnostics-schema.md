@@ -72,9 +72,13 @@ Distribution percentiles use the nearest-index estimator over sorted values: `ro
 
 Added `physicalFootprintBytes`, obtained from Darwin's `proc_pidinfo` task information. It complements peak RSS with the macOS memory-pressure accounting needed for simultaneous WhisperKit and translation-model tests.
 
-## Version 11 — current
+## Version 11
 
 Added privacy-safe `recognition_window` events. Each records the SDK result index, reported seek start, input-audio duration and end, first returned segment start, last returned segment end, and timestamp overflow beyond that result's reported input extent. These values distinguish incorrect seek offsets from decoder timestamps extending into padded audio without logging transcript content.
+
+## Version 12 — current
+
+Added `segment_reconciled` with typed reasons for content outside its authoritative recognition window, word-timestamp trimming, timestamp clipping, and duplicate overlapping text. Reconciliation diagnostics record only counts and time ranges, never removed text. Result windows are processed by absolute seek time, timestamps are bounded to their SDK-reported input extent, and exact cross-window duplicates must overlap in media time before removal.
 
 ## Evolution Rules
 
