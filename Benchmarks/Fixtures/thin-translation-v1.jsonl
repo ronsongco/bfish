@@ -1,0 +1,4 @@
+{"fixtureID":"thin-ja-001","language":"ja","sourceText":"今日は午後3時に東京駅で会いましょう。","referenceEnglish":"Let's meet at Tokyo Station at 3 p.m. today.","syntheticVoice":"Kyoko","provenance":"project-authored","license":"CC0-1.0"}
+{"fixtureID":"thin-ko-001","language":"ko","sourceText":"오늘 오후 3시에 서울역에서 만나요.","referenceEnglish":"Let's meet at Seoul Station at 3 p.m. today.","syntheticVoice":"Yuna","provenance":"project-authored","license":"CC0-1.0"}
+{"fixtureID":"thin-zh-001","language":"zh","sourceText":"我们今天下午三点在北京站见面吧。","referenceEnglish":"Let's meet at Beijing Station at 3 p.m. today.","syntheticVoice":"Tingting","provenance":"project-authored","license":"CC0-1.0"}
+{"fixtureID":"thin-pt-BR-001","language":"pt-BR","sourceText":"Vamos nos encontrar na Estação da Luz hoje às três da tarde.","referenceEnglish":"Let's meet at Luz Station at 3 p.m. today.","syntheticVoice":"Luciana","provenance":"project-authored","license":"CC0-1.0"}

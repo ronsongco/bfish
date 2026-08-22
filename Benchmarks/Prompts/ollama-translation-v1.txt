@@ -1,0 +1,5 @@
+Translate the following {language_name} text to English.
+Preserve names, numbers, tone, and uncertainty.
+Return only the translation, without commentary.
+
+{source_text}
