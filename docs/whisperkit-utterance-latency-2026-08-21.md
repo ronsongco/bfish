@@ -12,6 +12,8 @@ Five private, temporary excerpts of 3, 4, 5, 6, and 8 seconds were taken from th
 
 Median recognition latency was 967ms. This confirms that the 0.077 long-file RTF cannot be multiplied by utterance duration to predict live latency: fixed per-inference work is significant on short input.
 
+A least-squares fit across these five measurements is approximately `latency = 640ms + 75ms × audio seconds`. The fixed term dominates short utterances: three-second input costs about 28% of real time, while eight-second input costs about 15%. Live segmentation should therefore treat utterance length as an explicit latency-versus-efficiency control. Packing multiple utterances into one recognition window remains a possible offline throughput optimization, but it intentionally trades away time to first output.
+
 Each standalone process also spent approximately 1.17–1.42 seconds loading the cached model. That cost is excluded from recognition latency and is not paid per utterance by the actor-owned recognizer in a persistent CLI or app session.
 
 The recognition result leaves approximately 2–3 seconds of a 3–4 second live subtitle budget for translation, queueing, and presentation. Translation is therefore the latency-critical stage for the forthcoming three-way bake-off.

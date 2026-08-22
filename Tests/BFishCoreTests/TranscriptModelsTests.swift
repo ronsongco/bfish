@@ -78,8 +78,26 @@ import Testing
 
     #expect(text.hasSuffix("\n"))
     #expect(text.contains("\"event\":\"segment_completed\""))
-    #expect(text.contains("\"schemaVersion\":13"))
+    #expect(text.contains("\"schemaVersion\":14"))
     #expect(text.contains("\"stage\":\"translation\""))
+}
+
+@Test func terminalFormatterMarksSuspectedHallucinations() throws {
+    let segment = RecognizedSegment(
+        timeRange: try AudioTimeRange(start: 1, end: 2),
+        timeline: CaptureTimeline(),
+        language: .japanese,
+        sourceText: "ご視聴ありがとうございました"
+    )
+    let turn = TranscriptTurn(
+        segment: segment,
+        englishText: nil,
+        sessionLocale: nil,
+        qualityDisposition: .suspectedHallucination
+    )
+
+    #expect(TerminalSourceTranscriptFormatter().format(turn).contains("[suspected-hallucination]"))
+    #expect(TerminalTranscriptFormatter().format(turn).contains("[suspected-hallucination]"))
 }
 
 @Test func audioTimeRangeRejectsInvalidInferenceAndDecodedValues() throws {

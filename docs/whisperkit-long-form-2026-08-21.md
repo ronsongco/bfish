@@ -44,3 +44,20 @@ Schema-v12 reconciliation now bounds returned content to each result's reported 
 The file adapter now performs its own bounded VAD staging, transcribes authoritative windows sequentially, reconciles each completed window, and emits its finalized segments before reading and decoding the remainder of the file. The core recognition protocol carries segment, diagnostic, and completion events; batch recognizers retain a compatibility implementation.
 
 On the 8:39 fixture, terminal output appeared while the process was still running: approximately three minutes of timestamped source output had been delivered well before recognition completion. The final result matched the reconciled batch baseline with 24 windows, 141 segments, one out-of-window removal, zero discontinuities, a 514.76-second final segment end, and no media overflow. Completed transcript objects are not retained by the streaming adapter; only numeric values required for final aggregate metrics remain in memory.
+
+## Schema-v14 65-minute validation
+
+The two-speaker fixture was normalized to a temporary 16 kHz mono PCM file because seeking the compressed MP3 directly through `AVAudioFile` raised an Objective-C Core Audio exception. The source file was not modified, and neither audio nor transcript content is retained in the repository. Direct compressed-file incremental loading remains an adapter issue to resolve separately.
+
+The post-fix streaming run completed with:
+
+- 177 recognition windows and 1,594 reconciled segments; 1,593 source turns were printed and one segment was centrally filtered
+- 374.30 seconds recognition wall time, RTF 0.09583, effectively unchanged from the pre-reconciliation 0.0959 result
+- first finalized segment at 1,973ms after recognition start
+- 44 privacy-safe reconciliation events: 42 wholly outside their authoritative windows, one timestamp clip, and one word-level boundary trim
+- zero timeline discontinuities, zero segments beyond the 3,905.92-second media duration, and zero retained temporal overlaps
+- final segment end at 3,890.04 seconds
+- 190.8 MiB peak RSS and 90.8 MiB physical footprint
+- no missing/invalid seek-time repairs on this run
+
+This closes the long-form reconciliation finding: all 34 prior backward jumps and the prior 24.10-second overflow were removed without measurable RTF regression. The zero overlapping-survivor count indicates that exact-text duplicate matching was not masking partial duplicate seams in this fixture. The active-overlap duplicate scan avoids normalizing every historical segment pair.

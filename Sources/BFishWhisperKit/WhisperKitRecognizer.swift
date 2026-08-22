@@ -163,7 +163,8 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             peakResidentMemoryBytes: Self.peakResidentMemoryBytes(),
             physicalFootprintBytes: Self.physicalFootprintBytes(),
             segmentsBeyondAudioDurationCount: timestampOverflows.count,
-            maximumTimestampOverflowSeconds: timestampOverflows.max()
+            maximumTimestampOverflowSeconds: timestampOverflows.max(),
+            overlappingSurvivorCount: Self.overlappingSurvivorCount(mapped.segments)
         )
         var timings = [
             StageTiming(stage: "whisper_recognition_wall", milliseconds: recognitionMilliseconds),
@@ -267,6 +268,9 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
         var noSpeechProbabilities: [Double] = []
         var compressionRatios: [Double] = []
         var windowIndex = 0
+        var firstSegmentLatencyMilliseconds: Double?
+        var maximumEmittedEnd: Double?
+        var overlappingSurvivorCount = 0
 
         while true {
             try Task.checkCancellation()
@@ -323,6 +327,15 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
                 )
                 for diagnostic in mapped.diagnostics { continuation.yield(.diagnostic(diagnostic)) }
                 for segment in mapped.segments {
+                    if firstSegmentLatencyMilliseconds == nil {
+                        firstSegmentLatencyMilliseconds = Self.milliseconds(since: recognitionStart)
+                    }
+                    if let maximumEmittedEnd,
+                       segment.timeRange.start < maximumEmittedEnd - 0.001
+                    {
+                        overlappingSurvivorCount += 1
+                    }
+                    maximumEmittedEnd = max(maximumEmittedEnd ?? 0, segment.timeRange.end)
                     segmentCount += 1
                     lastSegmentEnd = max(lastSegmentEnd ?? 0, segment.timeRange.end)
                     if segment.timeRange.end > audioDuration {
@@ -369,7 +382,9 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             peakResidentMemoryBytes: Self.peakResidentMemoryBytes(),
             physicalFootprintBytes: Self.physicalFootprintBytes(),
             segmentsBeyondAudioDurationCount: timestampOverflows.count,
-            maximumTimestampOverflowSeconds: timestampOverflows.max()
+            maximumTimestampOverflowSeconds: timestampOverflows.max(),
+            firstSegmentLatencyMilliseconds: firstSegmentLatencyMilliseconds,
+            overlappingSurvivorCount: overlappingSurvivorCount
         )
         var timings = [
             StageTiming(stage: "whisper_recognition_wall", milliseconds: recognitionMilliseconds),
@@ -482,6 +497,18 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
         )
     }
 
+    static func overlappingSurvivorCount(_ segments: [RecognizedSegment]) -> Int {
+        var maximumEnd: Double?
+        var count = 0
+        for segment in segments.sorted(by: { $0.timeRange.start < $1.timeRange.start }) {
+            if let maximumEnd, segment.timeRange.start < maximumEnd - 0.001 {
+                count += 1
+            }
+            maximumEnd = max(maximumEnd ?? 0, segment.timeRange.end)
+        }
+        return count
+    }
+
     static func peakResidentMemoryBytes() -> UInt64? {
         var usage = rusage()
         guard getrusage(RUSAGE_SELF, &usage) == 0, usage.ru_maxrss >= 0 else { return nil }
@@ -535,13 +562,17 @@ enum WhisperKitResultMapper {
     ) -> SpeechRecognitionOutput {
         var segments: [RecognizedSegment] = []
         var diagnostics: [DiagnosticEvent] = []
-        let reconciled = reconcile(results: results)
+        let reconciled = reconcile(results: results, windowIndexBase: windowIndexBase)
         diagnostics.append(contentsOf: reconciled.diagnostics)
         var fallbackStart: TimeInterval = 0
         var previousStart: TimeInterval?
 
         for (windowIndex, result) in results.enumerated() {
-            diagnostics.append(windowDiagnostic(for: result, index: windowIndexBase + windowIndex))
+            diagnostics.append(windowDiagnostic(
+                for: result,
+                index: windowIndexBase + windowIndex,
+                resolvedWindowStart: reconciled.windowStarts[windowIndex]
+            ))
         }
         for rawSegment in reconciled.segments {
             let mapped = mapSegment(
@@ -588,17 +619,38 @@ enum WhisperKitResultMapper {
         let windowIndex: Int
     }
 
-    static func reconcile(results: [TranscriptionResult]) -> (
+    static func reconcile(
+        results: [TranscriptionResult],
+        windowIndexBase: Int = 0
+    ) -> (
         segments: [WindowedSegment],
-        diagnostics: [DiagnosticEvent]
+        diagnostics: [DiagnosticEvent],
+        windowStarts: [Double]
     ) {
         let tolerance = 0.001
         var candidates: [WindowedSegment] = []
         var diagnostics: [DiagnosticEvent] = []
+        var windowStarts: [Double] = []
+        var previousWindowEnd = 0.0
 
         for (windowIndex, result) in results.enumerated() {
-            let windowStart = Double(result.seekTime ?? 0)
+            let windowStart: Double
+            if let seekTime = result.seekTime, seekTime.isFinite, seekTime >= 0 {
+                windowStart = Double(seekTime)
+            } else {
+                windowStart = previousWindowEnd
+                diagnostics.append(DiagnosticEvent(
+                    event: .windowSeekRepaired,
+                    details: DiagnosticDetails(
+                        errorCode: result.seekTime == nil ? "missing_seek_time" : "invalid_seek_time",
+                        windowIndex: windowIndexBase + windowIndex,
+                        windowStartSeconds: windowStart
+                    )
+                ))
+            }
+            windowStarts.append(windowStart)
             let windowEnd = windowStart + result.timings.inputAudioSeconds
+            previousWindowEnd = windowEnd
             for source in result.segments {
                 var segment = source
                 let originalStart = Double(segment.start)
@@ -674,13 +726,16 @@ enum WhisperKitResultMapper {
             return $0.segment.start < $1.segment.start
         }
         var accepted: [WindowedSegment] = []
+        var active: [WindowedSegment] = []
         for candidate in candidates {
-            if let duplicate = accepted.last(where: {
+            active.removeAll { $0.segment.end <= candidate.segment.start }
+            let candidateText = normalizedText(candidate.segment.text)
+            let duplicate = active.last {
                 $0.windowIndex != candidate.windowIndex
-                    && normalizedText($0.segment.text) == normalizedText(candidate.segment.text)
-                    && candidate.segment.start < $0.segment.end
                     && candidate.segment.end > $0.segment.start
-            }) {
+                    && normalizedText($0.segment.text) == candidateText
+            }
+            if let duplicate {
                 diagnostics.append(reconciliationDiagnostic(
                     reason: .duplicateOverlap,
                     removedWordCount: candidate.segment.words?.count,
@@ -692,8 +747,9 @@ enum WhisperKitResultMapper {
                 continue
             }
             accepted.append(candidate)
+            active.append(candidate)
         }
-        return (accepted, diagnostics)
+        return (accepted, diagnostics, windowStarts)
     }
 
     private static func normalizedText(_ text: String) -> String {
@@ -723,8 +779,12 @@ enum WhisperKitResultMapper {
         )
     }
 
-    static func windowDiagnostic(for result: TranscriptionResult, index: Int) -> DiagnosticEvent {
-        let windowStart = Double(result.seekTime ?? 0)
+    static func windowDiagnostic(
+        for result: TranscriptionResult,
+        index: Int,
+        resolvedWindowStart: Double? = nil
+    ) -> DiagnosticEvent {
+        let windowStart = resolvedWindowStart ?? Double(result.seekTime ?? 0)
         let windowDuration = result.timings.inputAudioSeconds
         let windowEnd = windowStart + windowDuration
         let firstSegmentStart = result.segments.map { Double($0.start) }.min()

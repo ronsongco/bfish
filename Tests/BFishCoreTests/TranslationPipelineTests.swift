@@ -155,15 +155,28 @@ func punctuationOnlySegmentsAreFiltered(_ sourceText: String) {
     )
 
     var reasons: [SegmentFilterReason] = []
+    var quarantinedTurns: [TranscriptTurn] = []
+    var suppressionCodes: [String] = []
     for try await event in await pipeline.events(for: .file(URL(fileURLWithPath: "/tmp/example.wav"))) {
-        if case let .diagnostic(diagnostic) = event,
-           let reason = diagnostic.details?.segmentFilterReason
-        {
-            reasons.append(reason)
+        switch event {
+        case let .transcript(turn) where turn.qualityDisposition == .suspectedHallucination:
+            quarantinedTurns.append(turn)
+        case let .diagnostic(diagnostic):
+            if let reason = diagnostic.details?.segmentFilterReason { reasons.append(reason) }
+            if diagnostic.event == .translationSuppressed,
+               let code = diagnostic.details?.errorCode
+            {
+                suppressionCodes.append(code)
+            }
+        default:
+            break
         }
     }
 
-    #expect(reasons == [.knownHallucination, .repetitive])
+    #expect(reasons == [.repetitive])
+    #expect(quarantinedTurns.count == 1)
+    #expect(quarantinedTurns[0].englishText == nil)
+    #expect(suppressionCodes == ["suspected_hallucination"])
 }
 
 @Test func retainedContextHistoryIsBounded() throws {

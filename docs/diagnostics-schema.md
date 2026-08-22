@@ -80,9 +80,19 @@ Added privacy-safe `recognition_window` events. Each records the SDK result inde
 
 Added `segment_reconciled` with typed reasons for content outside its authoritative recognition window, word-timestamp trimming, timestamp clipping, and duplicate overlapping text. Reconciliation diagnostics record only counts and time ranges, never removed text. Result windows are processed by absolute seek time, timestamps are bounded to their SDK-reported input extent, and exact cross-window duplicates must overlap in media time before removal.
 
-## Version 13 — current
+## Version 13
 
-Added aggregate `compressionRatioDistribution` and the `knownHallucination` and `repetitive` segment-filter reasons. Exact multilingual variants of Whisper's common “thanks for watching” silence hallucination are blocked before translation. Segments above the configurable compression-ratio ceiling (2.4 by default) are treated as pathological repetition.
+Added aggregate `compressionRatioDistribution` and the `knownHallucination` and `repetitive` segment-filter reasons. Exact multilingual variants of Whisper's common “thanks for watching” silence hallucination were initially blocked before translation. Segments above the configurable compression-ratio ceiling (2.4 by default) are treated as pathological repetition.
+
+## Version 14 — current
+
+Added:
+
+- `window_seek_repaired`, emitted when a recognition result omits or supplies an invalid seek time; the adapter uses the preceding resolved window end rather than silently treating the result as starting at zero
+- `firstSegmentLatencyMilliseconds`, measured from recognition start to the first finalized segment
+- `overlappingSurvivorCount`, the number of finalized segments that still overlap an earlier retained segment in media time
+
+Known hallucination phrases are now quarantined rather than deleted: the source turn remains visible with `suspected_hallucination`, while translation and context retention are suppressed. The existing `knownHallucination` filter reason remains decodable for schema-v13 artifacts but is no longer emitted by the current pipeline.
 
 ## Evolution Rules
 

@@ -139,6 +139,23 @@ public actor TranslationPipeline {
             ))]
         }
 
+        if Self.isKnownHallucination(segment.sourceText) {
+            let turn = TranscriptTurn(
+                segment: segment,
+                englishText: nil,
+                sessionLocale: sessionLocale,
+                qualityDisposition: .suspectedHallucination
+            )
+            return [
+                .transcript(turn),
+                .diagnostic(DiagnosticEvent(
+                    event: .translationSuppressed,
+                    segmentID: segment.id,
+                    details: DiagnosticDetails(errorCode: "suspected_hallucination")
+                )),
+            ]
+        }
+
         if let probability = segment.noSpeechProbability, probability > maximumNoSpeechProbability {
             let turn = TranscriptTurn(segment: segment, englishText: nil, sessionLocale: sessionLocale)
             return [
@@ -271,13 +288,14 @@ public actor TranslationPipeline {
         maximumCompressionRatio: Double = 2.4
     ) -> SegmentFilterReason? {
         if let textualReason = filterReason(for: segment.sourceText) { return textualReason }
-        if knownHallucinations.contains(normalizedHallucinationText(segment.sourceText)) {
-            return .knownHallucination
-        }
         if let ratio = segment.compressionRatio, ratio > maximumCompressionRatio {
             return .repetitive
         }
         return nil
+    }
+
+    static func isKnownHallucination(_ text: String) -> Bool {
+        knownHallucinations.contains(normalizedHallucinationText(text))
     }
 
     private static let knownHallucinations: Set<String> = [

@@ -242,7 +242,7 @@ Fixed-duration chunks tend to cut words, repeat text, and create artificial punc
 1. Detect speech and meaningful pauses.
 2. Maintain a rolling audio buffer.
 3. Produce VAD-bounded utterances without overlap.
-4. Apply exact known-hallucination and compression-ratio repetition checks. Retain no-speech and confidence metrics for calibration; under the current VAD path they have not distinguished silence hallucinations from valid speech.
+4. Visibly quarantine exact known-hallucination phrases from translation/context, and filter compression-ratio repetition. Retain no-speech and confidence metrics for calibration; under the current VAD path they have not distinguished silence hallucinations from valid speech.
 5. Assemble complete source-language sentences where possible.
 6. Send only finalized sentences to Ollama.
 
@@ -646,7 +646,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Validate bounded finalized-segment streaming and schema-v12 reconciliation on the 65-minute fixture. The 9-minute reconciliation repeat removed its duplicated out-of-window segment, while isolated 3–8 second large-v3 utterances complete recognition in 0.86–1.22 seconds. Schema-v13 exact known-hallucination filtering blocks the observed silence and tonal failures; general music/noise robustness remains an evaluation task. Next, run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
+Bounded finalized-segment streaming and schema-v14 reconciliation are validated on the 65-minute fixture: 1,594 segments, zero discontinuities, zero media overflow, zero surviving temporal overlaps, 1.97 seconds to first finalized segment, and RTF 0.09583. Exact known-hallucination phrases are shown with a warning while translation and context are suppressed; general music/noise robustness remains an evaluation task. Direct incremental seeking in compressed MP3 input must be normalized or replaced because AVFoundation can raise an uncaught Core Audio exception. The next planned experiment is the thin three-way translation and simultaneous-load bake-off, but it is intentionally paused pending review of this correction pass. `bfish doctor --json` provides a machine-readable host preflight report.
 
 ## Related Projects and Prior Art
 

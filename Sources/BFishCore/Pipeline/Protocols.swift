@@ -98,6 +98,8 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
     public let physicalFootprintBytes: UInt64?
     public let segmentsBeyondAudioDurationCount: Int
     public let maximumTimestampOverflowSeconds: Double?
+    public let firstSegmentLatencyMilliseconds: Double?
+    public let overlappingSurvivorCount: Int
 
     public init(
         audioDurationSeconds: Double,
@@ -114,7 +116,9 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
         peakResidentMemoryBytes: UInt64? = nil,
         physicalFootprintBytes: UInt64? = nil,
         segmentsBeyondAudioDurationCount: Int = 0,
-        maximumTimestampOverflowSeconds: Double? = nil
+        maximumTimestampOverflowSeconds: Double? = nil,
+        firstSegmentLatencyMilliseconds: Double? = nil,
+        overlappingSurvivorCount: Int = 0
     ) {
         self.audioDurationSeconds = audioDurationSeconds
         self.sdkInputAudioSeconds = sdkInputAudioSeconds
@@ -131,6 +135,8 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
         self.physicalFootprintBytes = physicalFootprintBytes
         self.segmentsBeyondAudioDurationCount = segmentsBeyondAudioDurationCount
         self.maximumTimestampOverflowSeconds = maximumTimestampOverflowSeconds
+        self.firstSegmentLatencyMilliseconds = firstSegmentLatencyMilliseconds
+        self.overlappingSurvivorCount = overlappingSurvivorCount
     }
 
     public var diagnosticDetails: DiagnosticDetails {
@@ -149,7 +155,9 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
             peakResidentMemoryBytes: peakResidentMemoryBytes,
             physicalFootprintBytes: physicalFootprintBytes,
             segmentsBeyondAudioDurationCount: segmentsBeyondAudioDurationCount,
-            maximumTimestampOverflowSeconds: maximumTimestampOverflowSeconds
+            maximumTimestampOverflowSeconds: maximumTimestampOverflowSeconds,
+            firstSegmentLatencyMilliseconds: firstSegmentLatencyMilliseconds,
+            overlappingSurvivorCount: overlappingSurvivorCount
         )
     }
 }

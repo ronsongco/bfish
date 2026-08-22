@@ -18,6 +18,9 @@ public struct TerminalSourceTranscriptFormatter: Sendable {
         if let speaker = turn.speaker {
             header += " [\(speaker.rawValue)]"
         }
+        if turn.qualityDisposition == .suspectedHallucination {
+            header += " [suspected-hallucination]"
+        }
         return "\(header)\nSource: \(turn.sourceText)"
     }
 

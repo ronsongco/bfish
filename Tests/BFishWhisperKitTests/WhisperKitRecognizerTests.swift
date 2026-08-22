@@ -43,13 +43,15 @@ import WhisperKit
             text: "first",
             segments: [TranscriptionSegment(start: 10, end: 11, text: "first")],
             language: "ja",
-            timings: timings
+            timings: timings,
+            seekTime: 0
         ),
         TranscriptionResult(
             text: "second",
             segments: [TranscriptionSegment(start: 2, end: 3, text: "second")],
             language: "ja",
-            timings: timings
+            timings: timings,
+            seekTime: 0
         ),
     ]
 
@@ -64,6 +66,63 @@ import WhisperKit
     #expect(output.segments.allSatisfy { $0.timeline == timeline })
     #expect(output.segments.map(\.timeRange.start) == [2, 10])
     #expect(!output.diagnostics.contains { $0.event == .timelineDiscontinuity })
+}
+
+@Test func reconciliationDiagnosesAndRepairsMissingSeekTime() {
+    var timings = TranscriptionTimings(fullPipeline: 1)
+    timings.inputAudioSeconds = 10
+    let results = [
+        TranscriptionResult(
+            text: "first",
+            segments: [TranscriptionSegment(start: 1, end: 2, text: "first")],
+            language: "en",
+            timings: timings,
+            seekTime: 0
+        ),
+        TranscriptionResult(
+            text: "second",
+            segments: [TranscriptionSegment(start: 11, end: 12, text: "second")],
+            language: "en",
+            timings: timings
+        ),
+    ]
+
+    let reconciled = WhisperKitResultMapper.reconcile(results: results)
+
+    #expect(reconciled.windowStarts == [0, 10])
+    #expect(reconciled.segments.count == 2)
+    #expect(reconciled.diagnostics.contains {
+        $0.event == .windowSeekRepaired
+            && $0.details?.errorCode == "missing_seek_time"
+            && $0.details?.windowIndex == 1
+            && $0.details?.windowStartSeconds == 10
+    })
+}
+
+@Test func overlappingSurvivorMetricCountsUnreconciledTemporalOverlap() throws {
+    let timeline = CaptureTimeline()
+    let segments = [
+        RecognizedSegment(
+            timeRange: try AudioTimeRange(start: 0, end: 2),
+            timeline: timeline,
+            language: .english,
+            sourceText: "first"
+        ),
+        RecognizedSegment(
+            timeRange: try AudioTimeRange(start: 1.5, end: 3),
+            timeline: timeline,
+            language: .english,
+            sourceText: "different"
+        ),
+        RecognizedSegment(
+            timeRange: try AudioTimeRange(start: 4, end: 5),
+            timeline: timeline,
+            language: .english,
+            sourceText: "third"
+        ),
+    ]
+
+    #expect(WhisperKitRecognizer.overlappingSurvivorCount(segments) == 1)
 }
 
 @Test func probabilityDistributionProvidesStableCalibrationSummary() {

@@ -23,6 +23,7 @@ public enum DiagnosticEventKind: String, Codable, Sendable {
     case probabilityRepaired = "probability_repaired"
     case segmentFiltered = "segment_filtered"
     case segmentReconciled = "segment_reconciled"
+    case windowSeekRepaired = "window_seek_repaired"
 }
 
 public enum SegmentFilterReason: String, Codable, Sendable {
@@ -112,6 +113,8 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let originalSegmentEndSeconds: Double?
     public let reconciledSegmentStartSeconds: Double?
     public let reconciledSegmentEndSeconds: Double?
+    public let firstSegmentLatencyMilliseconds: Double?
+    public let overlappingSurvivorCount: Int?
 
     public init(
         errorCode: String? = nil,
@@ -153,7 +156,9 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         originalSegmentStartSeconds: Double? = nil,
         originalSegmentEndSeconds: Double? = nil,
         reconciledSegmentStartSeconds: Double? = nil,
-        reconciledSegmentEndSeconds: Double? = nil
+        reconciledSegmentEndSeconds: Double? = nil,
+        firstSegmentLatencyMilliseconds: Double? = nil,
+        overlappingSurvivorCount: Int? = nil
     ) {
         self.errorCode = errorCode
         self.droppedChunkCount = droppedChunkCount
@@ -195,11 +200,13 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         self.originalSegmentEndSeconds = originalSegmentEndSeconds
         self.reconciledSegmentStartSeconds = reconciledSegmentStartSeconds
         self.reconciledSegmentEndSeconds = reconciledSegmentEndSeconds
+        self.firstSegmentLatencyMilliseconds = firstSegmentLatencyMilliseconds
+        self.overlappingSurvivorCount = overlappingSurvivorCount
     }
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 13
+    public static let currentSchemaVersion = 14
 
     public let schemaVersion: Int
     public let timestamp: Date

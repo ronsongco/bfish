@@ -111,6 +111,7 @@ public struct RecognizedSegment: Codable, Equatable, Sendable, Identifiable {
     public let noSpeechProbability: Double?
     public let compressionRatio: Double?
     public let containsMixedLanguages: Bool
+    public let qualityDisposition: SegmentQualityDisposition?
 
     public init(
         id: UUID = UUID(),
@@ -123,7 +124,8 @@ public struct RecognizedSegment: Codable, Equatable, Sendable, Identifiable {
         languageConfidence: Double? = nil,
         noSpeechProbability: Double? = nil,
         compressionRatio: Double? = nil,
-        containsMixedLanguages: Bool = false
+        containsMixedLanguages: Bool = false,
+        qualityDisposition: SegmentQualityDisposition? = nil
     ) {
         self.id = id
         self.timeRange = timeRange
@@ -136,7 +138,12 @@ public struct RecognizedSegment: Codable, Equatable, Sendable, Identifiable {
         self.noSpeechProbability = noSpeechProbability
         self.compressionRatio = compressionRatio
         self.containsMixedLanguages = containsMixedLanguages
+        self.qualityDisposition = qualityDisposition
     }
+}
+
+public enum SegmentQualityDisposition: String, Codable, Equatable, Sendable {
+    case suspectedHallucination = "suspected_hallucination"
 }
 
 public struct TranscriptTurn: Codable, Equatable, Sendable, Identifiable {
@@ -148,8 +155,14 @@ public struct TranscriptTurn: Codable, Equatable, Sendable, Identifiable {
     public let sourceText: String
     public let englishText: String?
     public let speaker: SpeakerID?
+    public let qualityDisposition: SegmentQualityDisposition?
 
-    public init(segment: RecognizedSegment, englishText: String?, sessionLocale: SessionLocale?) {
+    public init(
+        segment: RecognizedSegment,
+        englishText: String?,
+        sessionLocale: SessionLocale?,
+        qualityDisposition: SegmentQualityDisposition? = nil
+    ) {
         self.id = segment.id
         self.timeRange = segment.timeRange
         self.timeline = segment.timeline
@@ -158,6 +171,7 @@ public struct TranscriptTurn: Codable, Equatable, Sendable, Identifiable {
         self.sourceText = segment.sourceText
         self.englishText = englishText
         self.speaker = segment.speaker
+        self.qualityDisposition = qualityDisposition ?? segment.qualityDisposition
     }
 }
 

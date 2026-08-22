@@ -118,7 +118,7 @@ Only after this source-transcription path is stable should the three-way transla
 
 File recognition now performs bounded VAD staging and yields reconciled finalized segments as each recognition window completes. The `--incremental` option remains temporarily as CLI compatibility but no longer changes file behavior. Language confidence gating and multi-window detection remain deferred; explicit `--language` is the reliable override for recordings with intros or known source languages.
 
-Under WhisperKit 1.1's VAD chunking, real speech, digital silence, and tonal non-speech all returned `noSpeechProbability = 0`; the pipeline therefore does not treat that value as its only hallucination safeguard. It additionally blocks exact known multilingual silence-hallucination phrases and segments with pathological compression ratio. Music, silence, confidence, and compression metrics remain benchmark dimensions because a finite blocklist cannot establish general hallucination safety.
+Under WhisperKit 1.1's VAD chunking, real speech, digital silence, and tonal non-speech all returned `noSpeechProbability = 0`; the pipeline therefore does not treat that value as its only hallucination safeguard. It visibly quarantines exact known multilingual silence-hallucination phrases from translation/context and filters segments with pathological compression ratio. Music, silence, confidence, and compression metrics remain benchmark dimensions because a finite blocklist cannot establish general hallucination safety.
 
 ## References
 

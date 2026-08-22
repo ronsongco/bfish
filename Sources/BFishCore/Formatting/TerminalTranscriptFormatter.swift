@@ -9,6 +9,9 @@ public struct TerminalTranscriptFormatter: TranscriptFormatting {
         if let speaker = turn.speaker {
             header += " [\(speaker.rawValue)]"
         }
+        if turn.qualityDisposition == .suspectedHallucination {
+            header += " [suspected-hallucination]"
+        }
 
         let english = turn.englishText ?? "<translation unavailable>"
         return "\(header)\nSource: \(turn.sourceText)\nEnglish: \(english)"
