@@ -12,6 +12,15 @@ public struct TerminalSourceTranscriptFormatter: Sendable {
         return "\(header)\nSource: \(segment.sourceText)"
     }
 
+    public func format(_ turn: TranscriptTurn) -> String {
+        let displayedLanguage = turn.sessionLocale?.rawValue ?? turn.language.rawValue
+        var header = "[\(Self.timestamp(turn.timeRange.start))] [\(displayedLanguage)]"
+        if let speaker = turn.speaker {
+            header += " [\(speaker.rawValue)]"
+        }
+        return "\(header)\nSource: \(turn.sourceText)"
+    }
+
     private static func timestamp(_ seconds: TimeInterval) -> String {
         let total = max(0, Int(seconds.rounded(.down)))
         return String(

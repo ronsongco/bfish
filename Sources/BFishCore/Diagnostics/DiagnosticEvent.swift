@@ -43,6 +43,22 @@ public enum ModelStatus: String, Codable, Sendable {
     case alreadyResident = "already_resident"
 }
 
+public struct ProbabilityDistributionSummary: Codable, Equatable, Sendable {
+    public let count: Int
+    public let minimum: Double
+    public let median: Double
+    public let percentile90: Double
+    public let maximum: Double
+
+    public init(count: Int, minimum: Double, median: Double, percentile90: Double, maximum: Double) {
+        self.count = count
+        self.minimum = minimum
+        self.median = median
+        self.percentile90 = percentile90
+        self.maximum = maximum
+    }
+}
+
 /// Typed diagnostic details intentionally exclude audio and transcript text.
 public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let errorCode: String?
@@ -60,6 +76,16 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let selectedLanguage: WhisperLanguage?
     public let languageConfidence: Double?
     public let automaticLanguageDetection: Bool?
+    public let segmentCount: Int?
+    public let lastSegmentEndSeconds: Double?
+    public let confidenceDistribution: ProbabilityDistributionSummary?
+    public let noSpeechProbabilityDistribution: ProbabilityDistributionSummary?
+    public let peakResidentMemoryBytes: UInt64?
+    public let segmentsBeyondAudioDurationCount: Int?
+    public let maximumTimestampOverflowSeconds: Double?
+    public let previousSegmentStartSeconds: Double?
+    public let currentSegmentStartSeconds: Double?
+    public let segmentStartDeltaSeconds: Double?
 
     public init(
         errorCode: String? = nil,
@@ -76,7 +102,17 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         progressPercentage: Int? = nil,
         selectedLanguage: WhisperLanguage? = nil,
         languageConfidence: Double? = nil,
-        automaticLanguageDetection: Bool? = nil
+        automaticLanguageDetection: Bool? = nil,
+        segmentCount: Int? = nil,
+        lastSegmentEndSeconds: Double? = nil,
+        confidenceDistribution: ProbabilityDistributionSummary? = nil,
+        noSpeechProbabilityDistribution: ProbabilityDistributionSummary? = nil,
+        peakResidentMemoryBytes: UInt64? = nil,
+        segmentsBeyondAudioDurationCount: Int? = nil,
+        maximumTimestampOverflowSeconds: Double? = nil,
+        previousSegmentStartSeconds: Double? = nil,
+        currentSegmentStartSeconds: Double? = nil,
+        segmentStartDeltaSeconds: Double? = nil
     ) {
         self.errorCode = errorCode
         self.droppedChunkCount = droppedChunkCount
@@ -93,11 +129,21 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         self.selectedLanguage = selectedLanguage
         self.languageConfidence = languageConfidence
         self.automaticLanguageDetection = automaticLanguageDetection
+        self.segmentCount = segmentCount
+        self.lastSegmentEndSeconds = lastSegmentEndSeconds
+        self.confidenceDistribution = confidenceDistribution
+        self.noSpeechProbabilityDistribution = noSpeechProbabilityDistribution
+        self.peakResidentMemoryBytes = peakResidentMemoryBytes
+        self.segmentsBeyondAudioDurationCount = segmentsBeyondAudioDurationCount
+        self.maximumTimestampOverflowSeconds = maximumTimestampOverflowSeconds
+        self.previousSegmentStartSeconds = previousSegmentStartSeconds
+        self.currentSegmentStartSeconds = currentSegmentStartSeconds
+        self.segmentStartDeltaSeconds = segmentStartDeltaSeconds
     }
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 8
+    public static let currentSchemaVersion = 9
 
     public let schemaVersion: Int
     public let timestamp: Date

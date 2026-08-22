@@ -50,9 +50,21 @@ Added:
 
 `realTimeFactor` is end-to-end recognition wall time, including automatic language detection but excluding model acquisition and loading, divided by the source file's media duration. `whisper_transcription_wall` remains available for comparison with conventional transcription-only benchmarks. Warm recognizer reuse emits `model_status: already_resident` and omits acquisition/load timing entries rather than recording ambiguous zeroes.
 
-## Version 8 — current
+## Version 8
 
 Added `selectedLanguage`, `languageConfidence`, and `automaticLanguageDetection` to recognition-completion details. These privacy-safe fields make the selected Whisper token and the evidence behind automatic selection available to benchmark consumers without including transcript content. WhisperKit 1.1 returns language log probabilities; `bfish` exponentiates the selected language's value and reports the resulting `0...1` confidence.
+
+## Version 9 — current
+
+Added privacy-safe long-form calibration details:
+
+- `segmentCount` and `lastSegmentEndSeconds`
+- aggregate `confidenceDistribution` and `noSpeechProbabilityDistribution` summaries containing count, minimum, median, 90th percentile, and maximum
+- `peakResidentMemoryBytes`
+- `segmentsBeyondAudioDurationCount` and `maximumTimestampOverflowSeconds`
+- `previousSegmentStartSeconds`, `currentSegmentStartSeconds`, and `segmentStartDeltaSeconds` on timeline discontinuities
+
+These fields intentionally contain no transcript text. A negative segment-start delta measures the magnitude of a detected overlap before any tolerance or timestamp-repair policy is selected.
 
 ## Evolution Rules
 

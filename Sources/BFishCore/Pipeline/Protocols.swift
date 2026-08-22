@@ -57,6 +57,13 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
     public let selectedLanguage: WhisperLanguage
     public let languageConfidence: Double?
     public let automaticLanguageDetection: Bool
+    public let segmentCount: Int
+    public let lastSegmentEndSeconds: Double?
+    public let confidenceDistribution: ProbabilityDistributionSummary?
+    public let noSpeechProbabilityDistribution: ProbabilityDistributionSummary?
+    public let peakResidentMemoryBytes: UInt64?
+    public let segmentsBeyondAudioDurationCount: Int
+    public let maximumTimestampOverflowSeconds: Double?
 
     public init(
         audioDurationSeconds: Double,
@@ -64,7 +71,14 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
         realTimeFactor: Double,
         selectedLanguage: WhisperLanguage,
         languageConfidence: Double?,
-        automaticLanguageDetection: Bool
+        automaticLanguageDetection: Bool,
+        segmentCount: Int = 0,
+        lastSegmentEndSeconds: Double? = nil,
+        confidenceDistribution: ProbabilityDistributionSummary? = nil,
+        noSpeechProbabilityDistribution: ProbabilityDistributionSummary? = nil,
+        peakResidentMemoryBytes: UInt64? = nil,
+        segmentsBeyondAudioDurationCount: Int = 0,
+        maximumTimestampOverflowSeconds: Double? = nil
     ) {
         self.audioDurationSeconds = audioDurationSeconds
         self.sdkInputAudioSeconds = sdkInputAudioSeconds
@@ -72,6 +86,31 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
         self.selectedLanguage = selectedLanguage
         self.languageConfidence = languageConfidence
         self.automaticLanguageDetection = automaticLanguageDetection
+        self.segmentCount = segmentCount
+        self.lastSegmentEndSeconds = lastSegmentEndSeconds
+        self.confidenceDistribution = confidenceDistribution
+        self.noSpeechProbabilityDistribution = noSpeechProbabilityDistribution
+        self.peakResidentMemoryBytes = peakResidentMemoryBytes
+        self.segmentsBeyondAudioDurationCount = segmentsBeyondAudioDurationCount
+        self.maximumTimestampOverflowSeconds = maximumTimestampOverflowSeconds
+    }
+
+    public var diagnosticDetails: DiagnosticDetails {
+        DiagnosticDetails(
+            audioDurationSeconds: audioDurationSeconds,
+            realTimeFactor: realTimeFactor,
+            sdkInputAudioSeconds: sdkInputAudioSeconds,
+            selectedLanguage: selectedLanguage,
+            languageConfidence: languageConfidence,
+            automaticLanguageDetection: automaticLanguageDetection,
+            segmentCount: segmentCount,
+            lastSegmentEndSeconds: lastSegmentEndSeconds,
+            confidenceDistribution: confidenceDistribution,
+            noSpeechProbabilityDistribution: noSpeechProbabilityDistribution,
+            peakResidentMemoryBytes: peakResidentMemoryBytes,
+            segmentsBeyondAudioDurationCount: segmentsBeyondAudioDurationCount,
+            maximumTimestampOverflowSeconds: maximumTimestampOverflowSeconds
+        )
     }
 }
 
@@ -87,6 +126,17 @@ public struct TranslationRequest: Sendable {
 
 public protocol TextTranslating: Sendable {
     func translate(_ request: TranslationRequest) async throws -> TranslationResponse
+}
+
+/// Keeps source-only commands on the production pipeline without introducing
+/// an external translation dependency. Callers may intentionally omit the
+/// returned identity text from presentation.
+public struct PassThroughTranslator: TextTranslating {
+    public init() {}
+
+    public func translate(_ request: TranslationRequest) async throws -> TranslationResponse {
+        TranslationResponse(englishText: request.segment.sourceText)
+    }
 }
 
 public protocol SpeakerDiarizing: Sendable {

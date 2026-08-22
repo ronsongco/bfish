@@ -69,7 +69,7 @@ WhisperKit 1.0.0 returns an array of `TranscriptionResult`; every contained `Tra
 | segment `noSpeechProb` | `noSpeechProbability` |
 | one value created per file invocation | required `CaptureTimeline` |
 
-WhisperKit 1.1 applies VAD and incremental-loading seek offsets to returned segment timestamps. The adapter additionally checks that segment starts remain monotonic across results and emits `timeline_discontinuity` if that invariant is violated.
+WhisperKit 1.1 exposes timestamps after its VAD and incremental-file seek processing, but long-form testing shows that returned result boundaries are not reliably monotonic and may drift beyond media duration. The adapter records backward-jump magnitude and aggregate media-duration overflow without silently clamping, sorting, or deduplicating segments. Chunk-boundary reconciliation is required before timestamps can be treated as presentation-safe.
 
 For automatic language selection, call WhisperKit's 30-second `detectLanguage(audioPath:)` first. Validate the returned token, record the selected probability as `languageConfidence`, then latch that language in `DecodingOptions` for the file. An explicit language override skips detection and uses confidence `1.0`.
 

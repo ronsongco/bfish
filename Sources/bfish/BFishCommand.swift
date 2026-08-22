@@ -69,31 +69,21 @@ struct TranscribeCommand: AsyncParsableCommand {
                 }
             }
         ))
-        let output = try await recognizer.transcribe(.file(fileURL), language: whisperLanguage)
+        let pipeline = TranslationPipeline(
+            recognizer: recognizer,
+            translator: PassThroughTranslator(),
+            profile: .offline,
+            sessionLocale: sessionLocale
+        )
         let formatter = TerminalSourceTranscriptFormatter()
 
-        for segment in output.segments {
-            write(formatter.format(segment, sessionLocale: sessionLocale) + "\n\n", to: .standardOutput)
-        }
-        for diagnostic in output.diagnostics {
-            FileHandle.standardError.write(try diagnostic.jsonLine())
-        }
-        if !output.timings.isEmpty {
-            let timing = DiagnosticEvent(
-                event: .recognitionCompleted,
-                timings: output.timings,
-                details: output.metrics.map {
-                    DiagnosticDetails(
-                        audioDurationSeconds: $0.audioDurationSeconds,
-                        realTimeFactor: $0.realTimeFactor,
-                        sdkInputAudioSeconds: $0.sdkInputAudioSeconds,
-                        selectedLanguage: $0.selectedLanguage,
-                        languageConfidence: $0.languageConfidence,
-                        automaticLanguageDetection: $0.automaticLanguageDetection
-                    )
-                }
-            )
-            FileHandle.standardError.write(try timing.jsonLine())
+        for try await event in await pipeline.events(for: .file(fileURL), language: whisperLanguage) {
+            switch event {
+            case let .transcript(turn):
+                write(formatter.format(turn) + "\n\n", to: .standardOutput)
+            case let .diagnostic(diagnostic):
+                FileHandle.standardError.write(try diagnostic.jsonLine())
+            }
         }
     }
 

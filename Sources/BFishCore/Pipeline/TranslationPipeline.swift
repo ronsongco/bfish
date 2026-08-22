@@ -90,16 +90,7 @@ public actor TranslationPipeline {
                         continuation.yield(.diagnostic(DiagnosticEvent(
                             event: .recognitionCompleted,
                             timings: recognition.timings,
-                            details: recognition.metrics.map {
-                                DiagnosticDetails(
-                                    audioDurationSeconds: $0.audioDurationSeconds,
-                                    realTimeFactor: $0.realTimeFactor,
-                                    sdkInputAudioSeconds: $0.sdkInputAudioSeconds,
-                                    selectedLanguage: $0.selectedLanguage,
-                                    languageConfidence: $0.languageConfidence,
-                                    automaticLanguageDetection: $0.automaticLanguageDetection
-                                )
-                            }
+                            details: recognition.metrics?.diagnosticDetails
                         )))
                     }
                     for segment in recognition.segments {

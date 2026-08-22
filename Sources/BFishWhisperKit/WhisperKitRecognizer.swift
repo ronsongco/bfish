@@ -1,5 +1,6 @@
 import AVFoundation
 import BFishCore
+import Darwin
 import Foundation
 import WhisperKit
 
@@ -141,13 +142,23 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             timeline: timeline
         )
         let sdkInputAudioSeconds = results.reduce(0) { $0 + $1.timings.inputAudioSeconds }
+        let timestampOverflows = mapped.segments
+            .map { $0.timeRange.end - audioDuration }
+            .filter { $0 > 0 }
         let metrics = SpeechRecognitionMetrics(
             audioDurationSeconds: audioDuration,
             sdkInputAudioSeconds: sdkInputAudioSeconds,
             realTimeFactor: recognitionMilliseconds / 1_000 / audioDuration,
             selectedLanguage: language,
             languageConfidence: languageConfidence,
-            automaticLanguageDetection: requestedLanguage == .automatic
+            automaticLanguageDetection: requestedLanguage == .automatic,
+            segmentCount: mapped.segments.count,
+            lastSegmentEndSeconds: mapped.segments.map(\.timeRange.end).max(),
+            confidenceDistribution: Self.distribution(mapped.segments.compactMap(\.confidence)),
+            noSpeechProbabilityDistribution: Self.distribution(mapped.segments.compactMap(\.noSpeechProbability)),
+            peakResidentMemoryBytes: Self.peakResidentMemoryBytes(),
+            segmentsBeyondAudioDurationCount: timestampOverflows.count,
+            maximumTimestampOverflowSeconds: timestampOverflows.max()
         )
         var timings = [
             StageTiming(stage: "whisper_recognition_wall", milliseconds: recognitionMilliseconds),
@@ -240,6 +251,28 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
         }
         return duration
     }
+
+    static func distribution(_ values: [Double]) -> ProbabilityDistributionSummary? {
+        let sorted = values.filter(\.isFinite).sorted()
+        guard let minimum = sorted.first, let maximum = sorted.last else { return nil }
+        func percentile(_ fraction: Double) -> Double {
+            let index = Int((Double(sorted.count - 1) * fraction).rounded())
+            return sorted[index]
+        }
+        return ProbabilityDistributionSummary(
+            count: sorted.count,
+            minimum: minimum,
+            median: percentile(0.5),
+            percentile90: percentile(0.9),
+            maximum: maximum
+        )
+    }
+
+    static func peakResidentMemoryBytes() -> UInt64? {
+        var usage = rusage()
+        guard getrusage(RUSAGE_SELF, &usage) == 0, usage.ru_maxrss >= 0 else { return nil }
+        return UInt64(usage.ru_maxrss)
+    }
 }
 
 final class ProgressReporter: @unchecked Sendable {
@@ -294,10 +327,16 @@ enum WhisperKitResultMapper {
                 fallbackStart = segment.timeRange.end
                 diagnostics.append(contentsOf: mapped.diagnostics)
                 if let previousStart, segment.timeRange.start < previousStart {
+                    let currentStart = segment.timeRange.start
                     diagnostics.append(DiagnosticEvent(
                         event: .timelineDiscontinuity,
                         segmentID: segment.id,
-                        details: DiagnosticDetails(errorCode: "non_monotonic_segment_start")
+                        details: DiagnosticDetails(
+                            errorCode: "non_monotonic_segment_start",
+                            previousSegmentStartSeconds: previousStart,
+                            currentSegmentStartSeconds: currentStart,
+                            segmentStartDeltaSeconds: currentStart - previousStart
+                        )
                     ))
                 }
                 previousStart = segment.timeRange.start

@@ -64,7 +64,23 @@ import WhisperKit
     #expect(output.diagnostics.contains { diagnostic in
         diagnostic.event == .timelineDiscontinuity
             && diagnostic.details?.errorCode == "non_monotonic_segment_start"
+            && diagnostic.details?.previousSegmentStartSeconds == 10
+            && diagnostic.details?.currentSegmentStartSeconds == 2
+            && diagnostic.details?.segmentStartDeltaSeconds == -8
     })
+}
+
+@Test func probabilityDistributionProvidesStableCalibrationSummary() {
+    let summary = WhisperKitRecognizer.distribution([0.1, 0.3, 0.2, 0.9, .nan])
+
+    #expect(summary == ProbabilityDistributionSummary(
+        count: 4,
+        minimum: 0.1,
+        median: 0.3,
+        percentile90: 0.9,
+        maximum: 0.9
+    ))
+    #expect(WhisperKitRecognizer.distribution([]) == nil)
 }
 
 @Test func mapperReportsNonFiniteConfidenceRepair() {

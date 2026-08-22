@@ -304,6 +304,21 @@ private struct RecognizerStub: SpeechRecognizing {
     }
 }
 
+@Test func passThroughTranslatorPreservesSourceText() async throws {
+    let segment = RecognizedSegment(
+        timeRange: try AudioTimeRange(start: 0, end: 1),
+        timeline: testTimeline,
+        language: .japanese,
+        sourceText: "原文"
+    )
+
+    let response = try await PassThroughTranslator().translate(
+        TranslationRequest(segment: segment, recentContext: [])
+    )
+
+    #expect(response.englishText == "原文")
+}
+
 private actor TranslatorStub: TextTranslating {
     private(set) var contextCounts: [Int] = []
     private(set) var contextSources: [[String]] = []

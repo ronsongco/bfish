@@ -4,7 +4,7 @@
 
 The project is intended for personal use on macOS 26 or later. All speech recognition and translation should run locally after the required models have been downloaded.
 
-> **Project status:** File-mode WhisperKit transcription is integrated behind an isolated adapter and source-only CLI command. The first real-audio smoke test and translation bake-off are next.
+> **Project status:** File-mode WhisperKit transcription is integrated behind an isolated adapter and source-only CLI command. Short and long-form real-audio probes are complete; chunk-boundary reconciliation and the translation bake-off are next.
 
 ## Goals
 
@@ -646,7 +646,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Run the [WhisperKit integration pre-flight](docs/whisperkit-preflight.md)'s first real smoke test with `tiny` and a short, legally usable fixture. Verify language detection, source text, timestamps, timing JSONL, and memory behavior. After file transcription is stable, run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
+Reconcile WhisperKit long-form chunk boundaries before treating file timestamps as presentation-safe. A 65-minute probe produced 34 backward jumps and timestamps extending 24 seconds beyond media duration, so this requires overlap-aware ordering/deduplication rather than a warning tolerance. Preserve aggregate diagnostics while implementing the correction, then verify true finalized-segment streaming. After file transcription is stable, run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
 
 ## Related Projects and Prior Art
 
