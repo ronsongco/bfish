@@ -29,6 +29,38 @@ public protocol SpeechSegmenting: Sendable {
 
 public protocol SpeechRecognizing: Sendable {
     func transcribe(_ input: AudioInput, language: WhisperLanguage) async throws -> SpeechRecognitionOutput
+    func events(
+        for input: AudioInput,
+        language: WhisperLanguage
+    ) async -> AsyncThrowingStream<SpeechRecognitionEvent, Error>
+}
+
+public enum SpeechRecognitionEvent: Sendable {
+    case segment(RecognizedSegment)
+    case diagnostic(DiagnosticEvent)
+    case completed(timings: [StageTiming], metrics: SpeechRecognitionMetrics?)
+}
+
+public extension SpeechRecognizing {
+    func events(
+        for input: AudioInput,
+        language: WhisperLanguage
+    ) async -> AsyncThrowingStream<SpeechRecognitionEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    let output = try await transcribe(input, language: language)
+                    for diagnostic in output.diagnostics { continuation.yield(.diagnostic(diagnostic)) }
+                    for segment in output.segments { continuation.yield(.segment(segment)) }
+                    continuation.yield(.completed(timings: output.timings, metrics: output.metrics))
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
 }
 
 public struct SpeechRecognitionOutput: Sendable {

@@ -85,21 +85,22 @@ public actor TranslationPipeline {
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let recognition = try await recognizer.transcribe(input, language: language)
-                    for diagnostic in recognition.diagnostics {
-                        continuation.yield(.diagnostic(diagnostic))
-                    }
-                    if !recognition.timings.isEmpty {
-                        continuation.yield(.diagnostic(DiagnosticEvent(
-                            event: .recognitionCompleted,
-                            timings: recognition.timings,
-                            details: recognition.metrics?.diagnosticDetails
-                        )))
-                    }
-                    for segment in recognition.segments {
-                        let output = await self.handle(segment, sessionID: sessionID)
-                        for event in output {
-                            continuation.yield(event)
+                    let recognitionEvents = await recognizer.events(for: input, language: language)
+                    for try await recognitionEvent in recognitionEvents {
+                        switch recognitionEvent {
+                        case let .diagnostic(diagnostic):
+                            continuation.yield(.diagnostic(diagnostic))
+                        case let .segment(segment):
+                            let output = await self.handle(segment, sessionID: sessionID)
+                            for event in output { continuation.yield(event) }
+                        case let .completed(timings, metrics):
+                            if !timings.isEmpty {
+                                continuation.yield(.diagnostic(DiagnosticEvent(
+                                    event: .recognitionCompleted,
+                                    timings: timings,
+                                    details: metrics?.diagnosticDetails
+                                )))
+                            }
                         }
                     }
                     self.endSession(sessionID)

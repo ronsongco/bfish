@@ -4,7 +4,7 @@
 
 The project is intended for personal use on macOS 26 or later. All speech recognition and translation should run locally after the required models have been downloaded.
 
-> **Project status:** File-mode WhisperKit transcription is integrated behind an isolated adapter and source-only CLI command. Short and long-form real-audio probes are complete; chunk-boundary reconciliation and the translation bake-off are next.
+> **Project status:** File-mode WhisperKit transcription now uses bounded audio staging, reconciles long-form window boundaries, and emits finalized source segments incrementally. The translation bake-off is next.
 
 ## Goals
 
@@ -44,7 +44,7 @@ Transcribe a local audio file while keeping translation out of the measurement:
 swift run bfish transcribe ./sample.wav --model tiny --language auto
 ```
 
-The first run may download the selected model under `~/Library/Application Support/bfish/Models`. Use `--model-path` for an existing model directory and `--incremental` for bounded-memory loading of long recordings. Source transcript text is written to stdout; privacy-safe JSONL diagnostics and timings are written to stderr.
+The first run may download the selected model under `~/Library/Application Support/bfish/Models`. Use `--model-path` for an existing model directory. File transcription now always uses bounded audio staging and finalized-segment output; `--incremental` remains temporarily as a compatibility flag. Source transcript text is written to stdout as windows complete; privacy-safe JSONL diagnostics and timings are written to stderr.
 
 Build and test the scaffold with:
 
@@ -503,7 +503,7 @@ A model that fails mandatory checks—such as frequently producing invalid outpu
 The shared core supports two deliberately different orchestration profiles:
 
 - **Live:** latency-first, bounded queues, prompt source-only output, and no required diarization. Robustness and timely recovery take priority over maximum model quality.
-- **Offline:** quality-first processing for podcasts and interviews, with larger models, optional diarization, and post-processing. Incremental output is still required so long recordings do not accumulate entirely in memory.
+- **Offline:** quality-first processing for podcasts and interviews, with larger models, optional diarization, post-processing, bounded audio staging, and finalized output as recognition windows complete.
 
 These profiles are represented by `PipelineProfile`, which supplies distinct buffering, context, and timeout defaults. Pipeline construction requires an explicit profile so file processing cannot accidentally inherit live defaults. Finalized transcript output is never placed in a dropping buffer; only replaceable live audio may use a drop-oldest/newest recovery policy with an explicit diagnostic.
 
@@ -646,7 +646,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Validate schema-v12 window-bounded reconciliation on the 65-minute fixture; the 9-minute repeat removed its duplicated out-of-window segment and eliminated the timeline discontinuity. Schema-v13 exact known-hallucination filtering blocks the observed silence and tonal failures, while general music/noise robustness remains an evaluation task. Isolated 3–8 second large-v3 utterances complete recognition in 0.86–1.22 seconds on the target host. Next, implement true finalized-segment streaming, then run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
+Validate bounded finalized-segment streaming and schema-v12 reconciliation on the 65-minute fixture. The 9-minute reconciliation repeat removed its duplicated out-of-window segment, while isolated 3–8 second large-v3 utterances complete recognition in 0.86–1.22 seconds. Schema-v13 exact known-hallucination filtering blocks the observed silence and tonal failures; general music/noise robustness remains an evaluation task. Next, run the thin three-way translation and simultaneous-load experiment before committing to the full Ollama adapter and scoreboard. `bfish doctor --json` provides a machine-readable host preflight report.
 
 ## Related Projects and Prior Art
 

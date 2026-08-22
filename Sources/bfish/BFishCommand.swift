@@ -34,7 +34,7 @@ struct TranscribeCommand: AsyncParsableCommand {
     @Option(name: .long, help: "Display locale such as pt-BR")
     var locale: String?
 
-    @Flag(name: .long, help: "Load long audio files with bounded memory")
+    @Flag(name: .long, help: "Compatibility flag; file recognition now always streams with bounded audio loading")
     var incremental = false
 
     func run() async throws {

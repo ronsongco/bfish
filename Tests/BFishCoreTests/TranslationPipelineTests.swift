@@ -330,6 +330,26 @@ func punctuationOnlySegmentsAreFiltered(_ sourceText: String) {
     #expect(await translator.contextCounts.count == 1)
 }
 
+@Test func pipelineYieldsFinalizedTurnBeforeRecognitionCompletes() async throws {
+    let recognizer = StreamingRecognizerStub()
+    let pipeline = TranslationPipeline(
+        recognizer: recognizer,
+        translator: TranslatorStub(),
+        profile: .live
+    )
+    let stream = await pipeline.events(for: .file(URL(fileURLWithPath: "/tmp/example.wav")))
+    var iterator = stream.makeAsyncIterator()
+
+    let first = try await iterator.next()
+
+    guard case let .transcript(turn) = first else {
+        Issue.record("Expected the first pipeline event to be a transcript turn")
+        return
+    }
+    #expect(turn.sourceText == "先に表示")
+    #expect(await !recognizer.finished)
+}
+
 private struct RecognizerStub: SpeechRecognizing {
     let segments: [RecognizedSegment]
 
@@ -380,5 +400,37 @@ private struct SlowTranslatorStub: TextTranslating {
     func translate(_ request: TranslationRequest) async throws -> TranslationResponse {
         try await Task.sleep(for: .seconds(1))
         return TranslationResponse(englishText: "late")
+    }
+}
+
+private actor StreamingRecognizerStub: SpeechRecognizing {
+    private(set) var finished = false
+
+    func transcribe(_ input: AudioInput, language: WhisperLanguage) async throws -> SpeechRecognitionOutput {
+        SpeechRecognitionOutput(segments: [])
+    }
+
+    func events(
+        for input: AudioInput,
+        language: WhisperLanguage
+    ) async -> AsyncThrowingStream<SpeechRecognitionEvent, Error> {
+        AsyncThrowingStream { continuation in
+            Task {
+                continuation.yield(.segment(RecognizedSegment(
+                    timeRange: try! AudioTimeRange(start: 0, end: 1),
+                    timeline: testTimeline,
+                    language: .japanese,
+                    sourceText: "先に表示"
+                )))
+                try? await Task.sleep(for: .milliseconds(200))
+                self.markFinished()
+                continuation.yield(.completed(timings: [], metrics: nil))
+                continuation.finish()
+            }
+        }
+    }
+
+    private func markFinished() {
+        finished = true
     }
 }

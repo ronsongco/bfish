@@ -65,6 +65,7 @@ public enum WhisperKitRecognizerError: Error, Equatable, LocalizedError, Sendabl
     case fileNotFound(String)
     case unsupportedLanguage(String)
     case invalidAudioDuration(String)
+    case incrementalStreamStalled
 
     public var errorDescription: String? {
         switch self {
@@ -76,6 +77,8 @@ public enum WhisperKitRecognizerError: Error, Equatable, LocalizedError, Sendabl
             "WhisperKit detected unsupported language token '\(language)'. The SDK or model language table may have changed; update bfish or use --language as a temporary override."
         case let .invalidAudioDuration(path):
             "Unable to determine a positive audio duration for: \(path)"
+        case .incrementalStreamStalled:
+            "Incremental audio chunking made no forward progress."
         }
     }
 }
@@ -180,6 +183,215 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             timings: timings + mapped.timings,
             metrics: metrics
         )
+    }
+
+    public func events(
+        for input: AudioInput,
+        language requestedLanguage: WhisperLanguage
+    ) async -> AsyncThrowingStream<SpeechRecognitionEvent, Error> {
+        AsyncThrowingStream { continuation in
+            let task = Task {
+                do {
+                    try await self.produceFinalizedEvents(
+                        input: input,
+                        requestedLanguage: requestedLanguage,
+                        continuation: continuation
+                    )
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+
+    private func produceFinalizedEvents(
+        input: AudioInput,
+        requestedLanguage: WhisperLanguage,
+        continuation: AsyncThrowingStream<SpeechRecognitionEvent, Error>.Continuation
+    ) async throws {
+        guard case let .file(audioURL) = input else { throw WhisperKitRecognizerError.unsupportedInput }
+        guard FileManager.default.fileExists(atPath: audioURL.path) else {
+            throw WhisperKitRecognizerError.fileNotFound(audioURL.path)
+        }
+
+        let timeline = CaptureTimeline(startedAt: Date())
+        let audioDuration = try Self.audioDuration(for: audioURL)
+        let loadedEngine = try await loadEngine()
+        let engine = loadedEngine.engine
+        let recognitionStart = ContinuousClock.now
+        let language: WhisperLanguage
+        let languageConfidence: Double?
+        if requestedLanguage == .automatic {
+            let detection = try await engine.detectLanguage(audioPath: audioURL.path)
+            language = try Self.validatedDetectedLanguage(detection.language)
+            languageConfidence = detection.langProbs[detection.language]
+                .flatMap(Self.languageConfidence(fromLogProbability:))
+        } else {
+            language = requestedLanguage
+            languageConfidence = 1
+        }
+
+        let decodingOptions = DecodingOptions(
+            task: .transcribe,
+            language: language.rawValue,
+            detectLanguage: false,
+            skipSpecialTokens: true,
+            wordTimestamps: true,
+            chunkingStrategy: ChunkingStrategy.none
+        )
+        let transcriptionStart = ContinuousClock.now
+        let audioFile = try AVAudioFile(
+            forReading: audioURL,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        let inputDuration = Double(audioFile.length) / audioFile.fileFormat.sampleRate
+        let maxChunkLength = engine.featureExtractor.windowSamples ?? Constants.defaultWindowSamples
+        let chunker = VADAudioChunker(vad: engine.voiceActivityDetector ?? EnergyVAD())
+        var currentTime = 0.0
+        var audioBuffer: [Float] = []
+        var bufferStartSample = 0
+        var sdkInputAudioSeconds = 0.0
+        var sdkFullPipeline = 0.0
+        var sdkAudioLoading = 0.0
+        var sdkAudioProcessing = 0.0
+        var sdkEncoding = 0.0
+        var sdkDecoding = 0.0
+        var sdkModelLoading = 0.0
+        var segmentCount = 0
+        var lastSegmentEnd: Double?
+        var timestampOverflows: [Double] = []
+        var confidences: [Double] = []
+        var noSpeechProbabilities: [Double] = []
+        var compressionRatios: [Double] = []
+        var windowIndex = 0
+
+        while true {
+            try Task.checkCancellation()
+            while audioBuffer.count <= maxChunkLength && currentTime < inputDuration {
+                let chunkEnd = min(currentTime + 30, inputDuration)
+                try autoreleasepool {
+                    let buffer = try AudioProcessor.loadAudio(
+                        fromFile: audioFile,
+                        channelMode: .sumChannels(nil),
+                        startTime: currentTime,
+                        endTime: chunkEnd
+                    )
+                    audioBuffer.append(contentsOf: AudioProcessor.convertBufferToArray(buffer: buffer))
+                }
+                currentTime = chunkEnd
+            }
+
+            if audioBuffer.isEmpty { break }
+            let atEOF = currentTime >= inputDuration
+            let chunks = try await chunker.chunkAll(
+                audioArray: audioBuffer,
+                maxChunkLength: maxChunkLength,
+                decodeOptions: nil
+            )
+            let finalizedChunks = atEOF
+                ? Array(chunks)
+                : chunks.filter { $0.seekOffsetIndex + maxChunkLength <= audioBuffer.count }
+            var consumed = 0
+
+            for chunk in finalizedChunks {
+                try Task.checkCancellation()
+                let absoluteOffset = bufferStartSample + chunk.seekOffsetIndex
+                let seekTime = Float(absoluteOffset) / Float(WhisperKit.sampleRate)
+                let rawResults = try await engine.transcribe(
+                    audioArray: chunk.audioSamples,
+                    audioArrayOffset: 0,
+                    decodeOptions: decodingOptions
+                )
+                for result in rawResults {
+                    result.segments = result.segments.map {
+                        TranscriptionUtilities.updateSegmentTimings(
+                            segment: $0,
+                            seekOffsetIndex: absoluteOffset
+                        )
+                    }
+                    result.seekTime = seekTime
+                }
+                let mapped = WhisperKitResultMapper.map(
+                    results: rawResults,
+                    language: language,
+                    languageConfidence: languageConfidence,
+                    timeline: timeline,
+                    windowIndexBase: windowIndex
+                )
+                for diagnostic in mapped.diagnostics { continuation.yield(.diagnostic(diagnostic)) }
+                for segment in mapped.segments {
+                    segmentCount += 1
+                    lastSegmentEnd = max(lastSegmentEnd ?? 0, segment.timeRange.end)
+                    if segment.timeRange.end > audioDuration {
+                        timestampOverflows.append(segment.timeRange.end - audioDuration)
+                    }
+                    if let confidence = segment.confidence { confidences.append(confidence) }
+                    if let probability = segment.noSpeechProbability { noSpeechProbabilities.append(probability) }
+                    if let ratio = segment.compressionRatio { compressionRatios.append(ratio) }
+                    continuation.yield(.segment(segment))
+                }
+                for result in rawResults {
+                    sdkInputAudioSeconds += result.timings.inputAudioSeconds
+                    sdkFullPipeline += result.timings.fullPipeline
+                    sdkAudioLoading += result.timings.audioLoading
+                    sdkAudioProcessing += result.timings.audioProcessing
+                    sdkEncoding += result.timings.encoding
+                    sdkDecoding += result.timings.decodingLoop
+                    sdkModelLoading = max(sdkModelLoading, result.timings.modelLoading)
+                }
+                windowIndex += rawResults.count
+                consumed = chunk.seekOffsetIndex + chunk.audioSamples.count
+            }
+
+            if atEOF { break }
+            guard consumed > 0 else { throw WhisperKitRecognizerError.incrementalStreamStalled }
+            bufferStartSample += consumed
+            audioBuffer = Array(audioBuffer[consumed...])
+        }
+
+        let transcriptionMilliseconds = Self.milliseconds(since: transcriptionStart)
+        let recognitionMilliseconds = Self.milliseconds(since: recognitionStart)
+        let metrics = SpeechRecognitionMetrics(
+            audioDurationSeconds: audioDuration,
+            sdkInputAudioSeconds: sdkInputAudioSeconds,
+            realTimeFactor: recognitionMilliseconds / 1_000 / audioDuration,
+            selectedLanguage: language,
+            languageConfidence: languageConfidence,
+            automaticLanguageDetection: requestedLanguage == .automatic,
+            segmentCount: segmentCount,
+            lastSegmentEndSeconds: lastSegmentEnd,
+            confidenceDistribution: Self.distribution(confidences),
+            noSpeechProbabilityDistribution: Self.distribution(noSpeechProbabilities),
+            compressionRatioDistribution: Self.distribution(compressionRatios),
+            peakResidentMemoryBytes: Self.peakResidentMemoryBytes(),
+            physicalFootprintBytes: Self.physicalFootprintBytes(),
+            segmentsBeyondAudioDurationCount: timestampOverflows.count,
+            maximumTimestampOverflowSeconds: timestampOverflows.max()
+        )
+        var timings = [
+            StageTiming(stage: "whisper_recognition_wall", milliseconds: recognitionMilliseconds),
+            StageTiming(stage: "whisper_transcription_wall", milliseconds: transcriptionMilliseconds),
+            StageTiming(stage: "input_audio", milliseconds: audioDuration * 1_000),
+            StageTiming(stage: "whisper_sdk_input_audio", milliseconds: sdkInputAudioSeconds * 1_000),
+        ]
+        if let acquisition = loadedEngine.acquisitionMilliseconds {
+            timings.insert(StageTiming(stage: "whisper_model_acquisition", milliseconds: acquisition), at: 0)
+        }
+        if let load = loadedEngine.loadMilliseconds {
+            timings.insert(StageTiming(stage: "whisper_model_load_wall", milliseconds: load), at: 1)
+        }
+        timings.append(contentsOf: [
+            StageTiming(stage: "whisper_full_pipeline", milliseconds: sdkFullPipeline * 1_000),
+            StageTiming(stage: "whisper_audio_loading", milliseconds: sdkAudioLoading * 1_000),
+            StageTiming(stage: "whisper_audio_processing", milliseconds: sdkAudioProcessing * 1_000),
+            StageTiming(stage: "whisper_encoding", milliseconds: sdkEncoding * 1_000),
+            StageTiming(stage: "whisper_decoding", milliseconds: sdkDecoding * 1_000),
+            StageTiming(stage: "whisper_sdk_model_loading", milliseconds: sdkModelLoading * 1_000),
+        ])
+        continuation.yield(.completed(timings: timings, metrics: metrics))
     }
 
     private func loadEngine() async throws -> (
@@ -318,7 +530,8 @@ enum WhisperKitResultMapper {
         results: [TranscriptionResult],
         language: WhisperLanguage,
         languageConfidence: Double?,
-        timeline: CaptureTimeline
+        timeline: CaptureTimeline,
+        windowIndexBase: Int = 0
     ) -> SpeechRecognitionOutput {
         var segments: [RecognizedSegment] = []
         var diagnostics: [DiagnosticEvent] = []
@@ -328,7 +541,7 @@ enum WhisperKitResultMapper {
         var previousStart: TimeInterval?
 
         for (windowIndex, result) in results.enumerated() {
-            diagnostics.append(windowDiagnostic(for: result, index: windowIndex))
+            diagnostics.append(windowDiagnostic(for: result, index: windowIndexBase + windowIndex))
         }
         for rawSegment in reconciled.segments {
             let mapped = mapSegment(
@@ -600,7 +813,7 @@ enum WhisperKitResultMapper {
         return (segment, diagnostics)
     }
 
-    private static func timingSummary(_ results: [TranscriptionResult]) -> [StageTiming] {
+    static func timingSummary(_ results: [TranscriptionResult]) -> [StageTiming] {
         guard !results.isEmpty else { return [] }
         return [
             StageTiming(stage: "whisper_full_pipeline", milliseconds: results.reduce(0) { $0 + $1.timings.fullPipeline } * 1_000),
