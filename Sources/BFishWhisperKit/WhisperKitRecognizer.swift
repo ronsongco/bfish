@@ -65,6 +65,7 @@ public enum WhisperKitRecognizerError: Error, Equatable, LocalizedError, Sendabl
     case fileNotFound(String)
     case unsupportedLanguage(String)
     case invalidAudioDuration(String)
+    case audioNormalizationFailed(path: String, reason: String)
     case incrementalStreamStalled
 
     public var errorDescription: String? {
@@ -77,6 +78,8 @@ public enum WhisperKitRecognizerError: Error, Equatable, LocalizedError, Sendabl
             "WhisperKit detected unsupported language token '\(language)'. The SDK or model language table may have changed; update bfish or use --language as a temporary override."
         case let .invalidAudioDuration(path):
             "Unable to determine a positive audio duration for: \(path)"
+        case let .audioNormalizationFailed(path, reason):
+            "Unable to decode compressed audio into a seekable temporary PCM file: \(path) (\(reason))"
         case .incrementalStreamStalled:
             "Incremental audio chunking made no forward progress."
         }
@@ -107,10 +110,12 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
         let loadedEngine = try await loadEngine()
         let engine = loadedEngine.engine
         let recognitionStart = ContinuousClock.now
+        let preparedAudio = try Self.prepareSeekableAudio(at: audioURL)
+        defer { preparedAudio.removeTemporaryFile() }
         let language: WhisperLanguage
         let languageConfidence: Double?
         if requestedLanguage == .automatic {
-            let detection = try await engine.detectLanguage(audioPath: audioURL.path)
+            let detection = try await engine.detectLanguage(audioPath: preparedAudio.url.path)
             let detected = try Self.validatedDetectedLanguage(detection.language)
             language = detected
             languageConfidence = detection.langProbs[detection.language]
@@ -131,7 +136,7 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
         let loadingMode: AudioInputOptions.AudioLoadingMode = configuration.incrementalLoading ? .incremental : .fullFile
         let transcriptionStart = ContinuousClock.now
         let results = try await engine.transcribe(
-            audioPath: audioURL.path,
+            audioPath: preparedAudio.url.path,
             audioInputOptions: AudioInputOptions(audioLoadingMode: loadingMode),
             decodeOptions: decodingOptions
         )
@@ -148,6 +153,11 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
         let timestampOverflows = mapped.segments
             .map { $0.timeRange.end - audioDuration }
             .filter { $0 > 0 }
+        let coverage = Self.coverageMetrics(
+            retainedRanges: mapped.segments.map { MediaRange($0.timeRange) },
+            removedRanges: Self.removedRanges(from: mapped.diagnostics),
+            audioDuration: audioDuration
+        )
         let metrics = SpeechRecognitionMetrics(
             audioDurationSeconds: audioDuration,
             sdkInputAudioSeconds: sdkInputAudioSeconds,
@@ -164,7 +174,14 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             physicalFootprintBytes: Self.physicalFootprintBytes(),
             segmentsBeyondAudioDurationCount: timestampOverflows.count,
             maximumTimestampOverflowSeconds: timestampOverflows.max(),
-            overlappingSurvivorCount: Self.overlappingSurvivorCount(mapped.segments)
+            overlappingSurvivorCount: Self.overlappingSurvivorCount(mapped.segments),
+            internalGapCount: coverage.internalGapCount,
+            totalInternalGapSeconds: coverage.totalInternalGapSeconds,
+            maximumInternalGapSeconds: coverage.maximumInternalGapSeconds,
+            trailingGapSeconds: coverage.trailingGapSeconds,
+            removedRangeCount: coverage.removedRangeCount,
+            uncoveredRemovedRangeCount: coverage.uncoveredRemovedRangeCount,
+            uncoveredRemovedRangeSeconds: coverage.uncoveredRemovedRangeSeconds
         )
         var timings = [
             StageTiming(stage: "whisper_recognition_wall", milliseconds: recognitionMilliseconds),
@@ -172,6 +189,9 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             StageTiming(stage: "input_audio", milliseconds: audioDuration * 1_000),
             StageTiming(stage: "whisper_sdk_input_audio", milliseconds: sdkInputAudioSeconds * 1_000),
         ]
+        if let normalization = preparedAudio.normalizationMilliseconds {
+            timings.insert(StageTiming(stage: "audio_normalization_wall", milliseconds: normalization), at: 0)
+        }
         if let acquisition = loadedEngine.acquisitionMilliseconds {
             timings.insert(StageTiming(stage: "whisper_model_acquisition", milliseconds: acquisition), at: 0)
         }
@@ -222,10 +242,12 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
         let loadedEngine = try await loadEngine()
         let engine = loadedEngine.engine
         let recognitionStart = ContinuousClock.now
+        let preparedAudio = try Self.prepareSeekableAudio(at: audioURL)
+        defer { preparedAudio.removeTemporaryFile() }
         let language: WhisperLanguage
         let languageConfidence: Double?
         if requestedLanguage == .automatic {
-            let detection = try await engine.detectLanguage(audioPath: audioURL.path)
+            let detection = try await engine.detectLanguage(audioPath: preparedAudio.url.path)
             language = try Self.validatedDetectedLanguage(detection.language)
             languageConfidence = detection.langProbs[detection.language]
                 .flatMap(Self.languageConfidence(fromLogProbability:))
@@ -244,7 +266,7 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
         )
         let transcriptionStart = ContinuousClock.now
         let audioFile = try AVAudioFile(
-            forReading: audioURL,
+            forReading: preparedAudio.url,
             commonFormat: .pcmFormatFloat32,
             interleaved: false
         )
@@ -271,6 +293,8 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
         var firstSegmentLatencyMilliseconds: Double?
         var maximumEmittedEnd: Double?
         var overlappingSurvivorCount = 0
+        var retainedRanges: [MediaRange] = []
+        var removedRanges: [MediaRange] = []
 
         while true {
             try Task.checkCancellation()
@@ -325,7 +349,12 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
                     timeline: timeline,
                     windowIndexBase: windowIndex
                 )
-                for diagnostic in mapped.diagnostics { continuation.yield(.diagnostic(diagnostic)) }
+                for diagnostic in mapped.diagnostics {
+                    if let removedRange = Self.removedRange(from: diagnostic) {
+                        removedRanges.append(removedRange)
+                    }
+                    continuation.yield(.diagnostic(diagnostic))
+                }
                 for segment in mapped.segments {
                     if firstSegmentLatencyMilliseconds == nil {
                         firstSegmentLatencyMilliseconds = Self.milliseconds(since: recognitionStart)
@@ -336,6 +365,7 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
                         overlappingSurvivorCount += 1
                     }
                     maximumEmittedEnd = max(maximumEmittedEnd ?? 0, segment.timeRange.end)
+                    retainedRanges.append(MediaRange(segment.timeRange))
                     segmentCount += 1
                     lastSegmentEnd = max(lastSegmentEnd ?? 0, segment.timeRange.end)
                     if segment.timeRange.end > audioDuration {
@@ -367,6 +397,11 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
 
         let transcriptionMilliseconds = Self.milliseconds(since: transcriptionStart)
         let recognitionMilliseconds = Self.milliseconds(since: recognitionStart)
+        let coverage = Self.coverageMetrics(
+            retainedRanges: retainedRanges,
+            removedRanges: removedRanges,
+            audioDuration: audioDuration
+        )
         let metrics = SpeechRecognitionMetrics(
             audioDurationSeconds: audioDuration,
             sdkInputAudioSeconds: sdkInputAudioSeconds,
@@ -384,7 +419,14 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             segmentsBeyondAudioDurationCount: timestampOverflows.count,
             maximumTimestampOverflowSeconds: timestampOverflows.max(),
             firstSegmentLatencyMilliseconds: firstSegmentLatencyMilliseconds,
-            overlappingSurvivorCount: overlappingSurvivorCount
+            overlappingSurvivorCount: overlappingSurvivorCount,
+            internalGapCount: coverage.internalGapCount,
+            totalInternalGapSeconds: coverage.totalInternalGapSeconds,
+            maximumInternalGapSeconds: coverage.maximumInternalGapSeconds,
+            trailingGapSeconds: coverage.trailingGapSeconds,
+            removedRangeCount: coverage.removedRangeCount,
+            uncoveredRemovedRangeCount: coverage.uncoveredRemovedRangeCount,
+            uncoveredRemovedRangeSeconds: coverage.uncoveredRemovedRangeSeconds
         )
         var timings = [
             StageTiming(stage: "whisper_recognition_wall", milliseconds: recognitionMilliseconds),
@@ -392,6 +434,9 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             StageTiming(stage: "input_audio", milliseconds: audioDuration * 1_000),
             StageTiming(stage: "whisper_sdk_input_audio", milliseconds: sdkInputAudioSeconds * 1_000),
         ]
+        if let normalization = preparedAudio.normalizationMilliseconds {
+            timings.insert(StageTiming(stage: "audio_normalization_wall", milliseconds: normalization), at: 0)
+        }
         if let acquisition = loadedEngine.acquisitionMilliseconds {
             timings.insert(StageTiming(stage: "whisper_model_acquisition", milliseconds: acquisition), at: 0)
         }
@@ -481,6 +526,80 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
         return duration
     }
 
+    struct PreparedAudio {
+        let url: URL
+        let temporaryURL: URL?
+        let normalizationMilliseconds: Double?
+
+        func removeTemporaryFile() {
+            guard let temporaryURL else { return }
+            try? FileManager.default.removeItem(at: temporaryURL)
+        }
+    }
+
+    static func prepareSeekableAudio(at sourceURL: URL) throws -> PreparedAudio {
+        let probe = try AVAudioFile(forReading: sourceURL)
+        guard probe.fileFormat.streamDescription.pointee.mFormatID != kAudioFormatLinearPCM else {
+            return PreparedAudio(url: sourceURL, temporaryURL: nil, normalizationMilliseconds: nil)
+        }
+
+        let start = ContinuousClock.now
+        let temporaryURL = FileManager.default.temporaryDirectory
+            .appending(path: "bfish-\(UUID().uuidString).caf")
+        var phase = "opening compressed input"
+        do {
+            try autoreleasepool {
+                let input = try AVAudioFile(
+                    forReading: sourceURL,
+                    commonFormat: .pcmFormatFloat32,
+                    interleaved: false
+                )
+                let format = input.processingFormat
+                phase = "creating temporary PCM output"
+                let output = try AVAudioFile(
+                    forWriting: temporaryURL,
+                    settings: [
+                        AVFormatIDKey: kAudioFormatLinearPCM,
+                        AVSampleRateKey: format.sampleRate,
+                        AVNumberOfChannelsKey: Int(format.channelCount),
+                        AVLinearPCMBitDepthKey: 16,
+                        AVLinearPCMIsFloatKey: false,
+                        AVLinearPCMIsBigEndianKey: false,
+                        AVLinearPCMIsNonInterleaved: false,
+                    ],
+                    commonFormat: .pcmFormatFloat32,
+                    interleaved: false
+                )
+                guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16_384) else {
+                    throw WhisperKitRecognizerError.audioNormalizationFailed(
+                        path: sourceURL.path,
+                        reason: "unable to allocate a PCM buffer"
+                    )
+                }
+                phase = "decoding compressed input"
+                while input.framePosition < input.length {
+                    let remaining = input.length - input.framePosition
+                    let frameCount = AVAudioFrameCount(min(AVAudioFramePosition(buffer.frameCapacity), remaining))
+                    try input.read(into: buffer, frameCount: frameCount)
+                    guard buffer.frameLength > 0 else { break }
+                    try output.write(from: buffer)
+                }
+            }
+        } catch {
+            try? FileManager.default.removeItem(at: temporaryURL)
+            if let typed = error as? WhisperKitRecognizerError { throw typed }
+            throw WhisperKitRecognizerError.audioNormalizationFailed(
+                path: sourceURL.path,
+                reason: "\(phase): \(error.localizedDescription)"
+            )
+        }
+        return PreparedAudio(
+            url: temporaryURL,
+            temporaryURL: temporaryURL,
+            normalizationMilliseconds: milliseconds(since: start)
+        )
+    }
+
     static func distribution(_ values: [Double]) -> ProbabilityDistributionSummary? {
         let sorted = values.filter(\.isFinite).sorted()
         guard let minimum = sorted.first, let maximum = sorted.last else { return nil }
@@ -507,6 +626,95 @@ public actor WhisperKitRecognizer: SpeechRecognizing {
             maximumEnd = max(maximumEnd ?? 0, segment.timeRange.end)
         }
         return count
+    }
+
+    struct MediaRange: Equatable {
+        let start: Double
+        let end: Double
+
+        init(start: Double, end: Double) {
+            self.start = start
+            self.end = end
+        }
+
+        init(_ timeRange: AudioTimeRange) {
+            self.init(start: timeRange.start, end: timeRange.end)
+        }
+    }
+
+    struct CoverageMetrics: Equatable {
+        let internalGapCount: Int
+        let totalInternalGapSeconds: Double
+        let maximumInternalGapSeconds: Double?
+        let trailingGapSeconds: Double
+        let removedRangeCount: Int
+        let uncoveredRemovedRangeCount: Int
+        let uncoveredRemovedRangeSeconds: Double
+    }
+
+    static func removedRanges(from diagnostics: [DiagnosticEvent]) -> [MediaRange] {
+        diagnostics.compactMap(removedRange(from:))
+    }
+
+    static func removedRange(from diagnostic: DiagnosticEvent) -> MediaRange? {
+        guard diagnostic.event == .segmentReconciled,
+              diagnostic.details?.reconciliationReason == .outsideWindow,
+              let start = diagnostic.details?.originalSegmentStartSeconds,
+              let end = diagnostic.details?.originalSegmentEndSeconds,
+              start.isFinite, end.isFinite, end > start
+        else { return nil }
+        return MediaRange(start: start, end: end)
+    }
+
+    static func coverageMetrics(
+        retainedRanges: [MediaRange],
+        removedRanges: [MediaRange],
+        audioDuration: Double
+    ) -> CoverageMetrics {
+        let retained = retainedRanges.sorted { $0.start < $1.start }
+        var gaps: [Double] = []
+        var maximumEnd: Double?
+        for range in retained {
+            if let maximumEnd, range.start > maximumEnd {
+                gaps.append(range.start - maximumEnd)
+            }
+            maximumEnd = max(maximumEnd ?? 0, range.end)
+        }
+
+        var uncoveredCount = 0
+        var uncoveredSeconds = 0.0
+        for removed in removedRanges {
+            let clippedStart = min(audioDuration, max(0, removed.start))
+            let clippedEnd = min(audioDuration, max(0, removed.end))
+            guard clippedEnd > clippedStart else { continue }
+            var coveredUntil = clippedStart
+            var coveredSeconds = 0.0
+            for kept in retained {
+                if kept.end <= clippedStart { continue }
+                if kept.start >= clippedEnd { break }
+                let intersectionStart = max(clippedStart, kept.start)
+                let intersectionEnd = min(clippedEnd, kept.end)
+                guard intersectionEnd > max(coveredUntil, intersectionStart) else { continue }
+                coveredSeconds += intersectionEnd - max(coveredUntil, intersectionStart)
+                coveredUntil = intersectionEnd
+                if coveredUntil >= clippedEnd { break }
+            }
+            let uncovered = max(0, clippedEnd - clippedStart - coveredSeconds)
+            if uncovered > 0.001 {
+                uncoveredCount += 1
+                uncoveredSeconds += uncovered
+            }
+        }
+
+        return CoverageMetrics(
+            internalGapCount: gaps.count,
+            totalInternalGapSeconds: gaps.reduce(0, +),
+            maximumInternalGapSeconds: gaps.max(),
+            trailingGapSeconds: max(0, audioDuration - (maximumEnd ?? 0)),
+            removedRangeCount: removedRanges.count,
+            uncoveredRemovedRangeCount: uncoveredCount,
+            uncoveredRemovedRangeSeconds: uncoveredSeconds
+        )
     }
 
     static func peakResidentMemoryBytes() -> UInt64? {

@@ -84,7 +84,7 @@ Added `segment_reconciled` with typed reasons for content outside its authoritat
 
 Added aggregate `compressionRatioDistribution` and the `knownHallucination` and `repetitive` segment-filter reasons. Exact multilingual variants of Whisper's common “thanks for watching” silence hallucination were initially blocked before translation. Segments above the configurable compression-ratio ceiling (2.4 by default) are treated as pathological repetition.
 
-## Version 14 — current
+## Version 14
 
 Added:
 
@@ -93,6 +93,18 @@ Added:
 - `overlappingSurvivorCount`, the number of finalized segments that still overlap an earlier retained segment in media time
 
 Known hallucination phrases are now quarantined rather than deleted: the source turn remains visible with `suspected_hallucination`, while translation and context retention are suppressed. The existing `knownHallucination` filter reason remains decodable for schema-v13 artifacts but is no longer emitted by the current pipeline.
+
+## Version 15 — current
+
+Added privacy-safe reconciliation coverage metrics to `recognition_completed`:
+
+- `internalGapCount`, `totalInternalGapSeconds`, and `maximumInternalGapSeconds`
+- `trailingGapSeconds`
+- `removedRangeCount`, `uncoveredRemovedRangeCount`, and `uncoveredRemovedRangeSeconds`
+
+Internal gaps are measured between retained segment time ranges and exclude the initial and trailing media regions. Removed-range coverage compares wholly out-of-window decoder ranges against the union of retained segment ranges after clipping both to authoritative media duration. These aggregates contain no transcript or audio content.
+
+Compressed inputs are decoded sequentially into a private temporary linear-PCM file before incremental seeking. `audio_normalization_wall` records that preprocessing cost when normalization occurs; linear-PCM inputs omit the timing rather than reporting zero.
 
 ## Evolution Rules
 

@@ -1,4 +1,5 @@
 import Testing
+import AVFoundation
 import BFishCore
 import Foundation
 import WhisperKit
@@ -123,6 +124,59 @@ import WhisperKit
     ]
 
     #expect(WhisperKitRecognizer.overlappingSurvivorCount(segments) == 1)
+}
+
+@Test func coverageMetricsSeparateInternalTrailingAndRemovedRangeGaps() {
+    let metrics = WhisperKitRecognizer.coverageMetrics(
+        retainedRanges: [
+            .init(start: 0, end: 2),
+            .init(start: 4, end: 6),
+            .init(start: 8, end: 9),
+        ],
+        removedRanges: [
+            .init(start: 1, end: 5),
+            .init(start: 6.5, end: 7.5),
+        ],
+        audioDuration: 10
+    )
+
+    #expect(metrics.internalGapCount == 2)
+    #expect(metrics.totalInternalGapSeconds == 4)
+    #expect(metrics.maximumInternalGapSeconds == 2)
+    #expect(metrics.trailingGapSeconds == 1)
+    #expect(metrics.removedRangeCount == 2)
+    #expect(metrics.uncoveredRemovedRangeCount == 2)
+    #expect(metrics.uncoveredRemovedRangeSeconds == 3)
+}
+
+@Test func compressedAudioIsDecodedToTemporarySeekablePCM() throws {
+    let sourceURL = FileManager.default.temporaryDirectory
+        .appending(path: "bfish-test-\(UUID().uuidString).m4a")
+    defer { try? FileManager.default.removeItem(at: sourceURL) }
+    let format = AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1)!
+    try autoreleasepool {
+        let compressed = try AVAudioFile(
+            forWriting: sourceURL,
+            settings: [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 16_000,
+                AVNumberOfChannelsKey: 1,
+            ]
+        )
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16_000)!
+        buffer.frameLength = 16_000
+        try compressed.write(from: buffer)
+    }
+
+    let prepared = try WhisperKitRecognizer.prepareSeekableAudio(at: sourceURL)
+    defer { prepared.removeTemporaryFile() }
+    let decoded = try AVAudioFile(forReading: prepared.url)
+
+    #expect(prepared.url != sourceURL)
+    #expect(prepared.temporaryURL != nil)
+    #expect(prepared.normalizationMilliseconds != nil)
+    #expect(decoded.fileFormat.streamDescription.pointee.mFormatID == kAudioFormatLinearPCM)
+    #expect(decoded.length > 0)
 }
 
 @Test func probabilityDistributionProvidesStableCalibrationSummary() {

@@ -61,3 +61,23 @@ The post-fix streaming run completed with:
 - no missing/invalid seek-time repairs on this run
 
 This closes the long-form reconciliation finding: all 34 prior backward jumps and the prior 24.10-second overflow were removed without measurable RTF regression. The zero overlapping-survivor count indicates that exact-text duplicate matching was not masking partial duplicate seams in this fixture. The active-overlap duplicate scan avoids normalizing every historical segment pair.
+
+The pre-fix count of 1,623 segments and schema-v14 count of 1,594 are not directly comparable: the runs used different chunking mechanisms, different input representations (compressed MP3 versus normalized PCM), and different reconciliation behavior. No duplicate-removal rate should be inferred from their difference. The zero-discontinuity, zero-overflow, and zero-overlap results are absolute properties of the reconciled run.
+
+## Schema-v15 direct-MP3 validation
+
+Compressed-input normalization was then moved into the adapter and the original 65-minute MP3 was passed directly to `bfish`. The adapter decoded it sequentially to temporary 16-bit linear PCM in 4.41 seconds, avoided compressed seeking, and removed the temporary file at termination. The complete run reported:
+
+- 177 recognition windows and 1,603 reconciled segments; 1,602 source turns were printed and one was centrally filtered
+- 380.35 seconds recognition wall time including normalization, RTF 0.09738
+- first finalized segment at 7.03 seconds including normalization
+- 43 reconciliation events: 41 wholly outside their authoritative windows, one timestamp clip, and one word-level boundary trim
+- zero timeline discontinuities, zero media overflow, zero retained overlaps, and zero seek repairs
+- final segment end at 3,890.04 seconds, making the 15.88-second shortfall one trailing media region rather than a sum inferred from discarded segments
+- 1,574 internal inter-segment gaps totaling 1,126.45 seconds, with a maximum of 22.60 seconds; these include ordinary pauses and non-speech and are not themselves evidence of lost content
+- 24 of 41 discarded out-of-window ranges were not covered by a retained timestamp range, totaling 4.57 seconds across the file
+- 203.9 MiB peak RSS and 93.0 MiB physical footprint
+
+The coverage result bounds but does not semantically classify the remaining uncertainty: out-of-window decoder output is often speculative duplication or hallucination, and the fixture has no reference transcript capable of proving that all 4.57 seconds represented speech. The aggregate is small relative to the 65-minute file, while the absolute continuity, overflow, and overlap invariants remain satisfied. A future conversational golden fixture can determine whether uncovered discarded ranges correlate with meaningful words.
+
+The schema-v14 PCM and schema-v15 direct-MP3 segment counts are also not a duplicate-removal comparison. The automatic decoder preserved the MP3's native channel/rate representation in temporary PCM, whereas the earlier manual fixture was downmixed and resampled with `ffmpeg`; that difference can change VAD boundaries and decoder segmentation.

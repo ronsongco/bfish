@@ -115,6 +115,13 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
     public let reconciledSegmentEndSeconds: Double?
     public let firstSegmentLatencyMilliseconds: Double?
     public let overlappingSurvivorCount: Int?
+    public let internalGapCount: Int?
+    public let totalInternalGapSeconds: Double?
+    public let maximumInternalGapSeconds: Double?
+    public let trailingGapSeconds: Double?
+    public let removedRangeCount: Int?
+    public let uncoveredRemovedRangeCount: Int?
+    public let uncoveredRemovedRangeSeconds: Double?
 
     public init(
         errorCode: String? = nil,
@@ -158,7 +165,14 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         reconciledSegmentStartSeconds: Double? = nil,
         reconciledSegmentEndSeconds: Double? = nil,
         firstSegmentLatencyMilliseconds: Double? = nil,
-        overlappingSurvivorCount: Int? = nil
+        overlappingSurvivorCount: Int? = nil,
+        internalGapCount: Int? = nil,
+        totalInternalGapSeconds: Double? = nil,
+        maximumInternalGapSeconds: Double? = nil,
+        trailingGapSeconds: Double? = nil,
+        removedRangeCount: Int? = nil,
+        uncoveredRemovedRangeCount: Int? = nil,
+        uncoveredRemovedRangeSeconds: Double? = nil
     ) {
         self.errorCode = errorCode
         self.droppedChunkCount = droppedChunkCount
@@ -202,11 +216,18 @@ public struct DiagnosticDetails: Codable, Equatable, Sendable {
         self.reconciledSegmentEndSeconds = reconciledSegmentEndSeconds
         self.firstSegmentLatencyMilliseconds = firstSegmentLatencyMilliseconds
         self.overlappingSurvivorCount = overlappingSurvivorCount
+        self.internalGapCount = internalGapCount
+        self.totalInternalGapSeconds = totalInternalGapSeconds
+        self.maximumInternalGapSeconds = maximumInternalGapSeconds
+        self.trailingGapSeconds = trailingGapSeconds
+        self.removedRangeCount = removedRangeCount
+        self.uncoveredRemovedRangeCount = uncoveredRemovedRangeCount
+        self.uncoveredRemovedRangeSeconds = uncoveredRemovedRangeSeconds
     }
 }
 
 public struct DiagnosticEvent: Codable, Equatable, Sendable {
-    public static let currentSchemaVersion = 14
+    public static let currentSchemaVersion = 15
 
     public let schemaVersion: Int
     public let timestamp: Date

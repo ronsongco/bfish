@@ -44,6 +44,8 @@ Transcribe a local audio file while keeping translation out of the measurement:
 swift run bfish transcribe ./sample.wav --model tiny --language auto
 ```
 
+Compressed inputs such as MP3 are accepted. Before incremental seeking, `bfish` decodes them sequentially into a private temporary linear-PCM file and removes it when recognition completes or fails. This avoids uncatchable AVFoundation failures caused by seeking directly inside some compressed files. The one-time normalization cost is reported as `audio_normalization_wall` in diagnostic JSONL.
+
 The first run may download the selected model under `~/Library/Application Support/bfish/Models`. Use `--model-path` for an existing model directory. File transcription now always uses bounded audio staging and finalized-segment output; `--incremental` remains temporarily as a compatibility flag. Source transcript text is written to stdout as windows complete; privacy-safe JSONL diagnostics and timings are written to stderr.
 
 Build and test the scaffold with:
@@ -646,7 +648,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Bounded finalized-segment streaming and schema-v14 reconciliation are validated on the 65-minute fixture: 1,594 segments, zero discontinuities, zero media overflow, zero surviving temporal overlaps, 1.97 seconds to first finalized segment, and RTF 0.09583. Exact known-hallucination phrases are shown with a warning while translation and context are suppressed; general music/noise robustness remains an evaluation task. Direct incremental seeking in compressed MP3 input must be normalized or replaced because AVFoundation can raise an uncaught Core Audio exception. The next planned experiment is the thin three-way translation and simultaneous-load bake-off, but it is intentionally paused pending review of this correction pass. `bfish doctor --json` provides a machine-readable host preflight report.
+Bounded finalized-segment streaming and schema-v15 reconciliation are validated directly on the 65-minute MP3 fixture: 1,603 segments, zero discontinuities, zero media overflow, zero surviving temporal overlaps, 4.41 seconds of automatic audio normalization, 7.03 seconds to first finalized segment including normalization, and RTF 0.09738. The 15.88-second final shortfall is one trailing media region; 24 discarded out-of-window decoder ranges lacked retained timestamp coverage, totaling 4.57 seconds across the file. Exact known-hallucination phrases are shown with a warning while translation and context are suppressed; general music/noise robustness remains an evaluation task. The next planned experiment is the thin three-way translation and simultaneous-load bake-off, but it is intentionally paused after this correction pass. `bfish doctor --json` provides a machine-readable host preflight report.
 
 ## Related Projects and Prior Art
 

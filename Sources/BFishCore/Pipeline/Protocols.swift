@@ -100,6 +100,13 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
     public let maximumTimestampOverflowSeconds: Double?
     public let firstSegmentLatencyMilliseconds: Double?
     public let overlappingSurvivorCount: Int
+    public let internalGapCount: Int
+    public let totalInternalGapSeconds: Double
+    public let maximumInternalGapSeconds: Double?
+    public let trailingGapSeconds: Double
+    public let removedRangeCount: Int
+    public let uncoveredRemovedRangeCount: Int
+    public let uncoveredRemovedRangeSeconds: Double
 
     public init(
         audioDurationSeconds: Double,
@@ -118,7 +125,14 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
         segmentsBeyondAudioDurationCount: Int = 0,
         maximumTimestampOverflowSeconds: Double? = nil,
         firstSegmentLatencyMilliseconds: Double? = nil,
-        overlappingSurvivorCount: Int = 0
+        overlappingSurvivorCount: Int = 0,
+        internalGapCount: Int = 0,
+        totalInternalGapSeconds: Double = 0,
+        maximumInternalGapSeconds: Double? = nil,
+        trailingGapSeconds: Double = 0,
+        removedRangeCount: Int = 0,
+        uncoveredRemovedRangeCount: Int = 0,
+        uncoveredRemovedRangeSeconds: Double = 0
     ) {
         self.audioDurationSeconds = audioDurationSeconds
         self.sdkInputAudioSeconds = sdkInputAudioSeconds
@@ -137,6 +151,13 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
         self.maximumTimestampOverflowSeconds = maximumTimestampOverflowSeconds
         self.firstSegmentLatencyMilliseconds = firstSegmentLatencyMilliseconds
         self.overlappingSurvivorCount = overlappingSurvivorCount
+        self.internalGapCount = internalGapCount
+        self.totalInternalGapSeconds = totalInternalGapSeconds
+        self.maximumInternalGapSeconds = maximumInternalGapSeconds
+        self.trailingGapSeconds = trailingGapSeconds
+        self.removedRangeCount = removedRangeCount
+        self.uncoveredRemovedRangeCount = uncoveredRemovedRangeCount
+        self.uncoveredRemovedRangeSeconds = uncoveredRemovedRangeSeconds
     }
 
     public var diagnosticDetails: DiagnosticDetails {
@@ -157,7 +178,14 @@ public struct SpeechRecognitionMetrics: Equatable, Sendable {
             segmentsBeyondAudioDurationCount: segmentsBeyondAudioDurationCount,
             maximumTimestampOverflowSeconds: maximumTimestampOverflowSeconds,
             firstSegmentLatencyMilliseconds: firstSegmentLatencyMilliseconds,
-            overlappingSurvivorCount: overlappingSurvivorCount
+            overlappingSurvivorCount: overlappingSurvivorCount,
+            internalGapCount: internalGapCount,
+            totalInternalGapSeconds: totalInternalGapSeconds,
+            maximumInternalGapSeconds: maximumInternalGapSeconds,
+            trailingGapSeconds: trailingGapSeconds,
+            removedRangeCount: removedRangeCount,
+            uncoveredRemovedRangeCount: uncoveredRemovedRangeCount,
+            uncoveredRemovedRangeSeconds: uncoveredRemovedRangeSeconds
         )
     }
 }
