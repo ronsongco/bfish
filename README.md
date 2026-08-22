@@ -275,6 +275,8 @@ Model selection will remain configurable. The anticipated development defaults a
 
 Whisper's direct English translation task is an early comparison baseline, not merely a deferred fallback.
 
+The 626 MB large-v3 variant returned source-language text even under a verified `.translate` task. The `small` variant produced English, but the thin probe found critical Korean time/place errors and a literal Brazilian Portuguese proper-name translation. Because the product must show source and English together, direct translation requires a second decode; the measured sum of separate `small` transcription and translation RTFs was 0.19–0.26 before orchestration overhead. It remains a baseline rather than replacing text translation.
+
 Source-language detection will use a warm-up window and a stateful language tracker. Once selected, a language should remain latched until repeated contrary evidence crosses a defined threshold. The tracker must also support mixed or code-switched speech rather than forcing a permanent single-language latch, particularly for Tagalog-English conversations. Explicit user selection always overrides automatic detection.
 
 Whisper recognition tokens and session locale tags are separate types. `WhisperLanguage` validates and normalizes the complete token set supported by the resolved WhisperKit SDK, including Cantonese (`yue`), while an optional, validated `SessionLocale` is configured once on the pipeline session and carries locale-aware values such as `pt-BR` into transcript turns and terminal display. Detected languages use the same validated type as language overrides.
@@ -336,6 +338,12 @@ Translation prompts must instruct the model to:
 - Return only translation-owned fields defined by the structured schema.
 
 Every Ollama request will set `keep_alive` explicitly. Cold model-load time and warm utterance latency will be measured separately.
+
+### Apple Translation assets
+
+Apple Translation remains a live-path candidate and requires its on-device language assets. On macOS 26, open **System Settings → General → Language & Region → Translation Languages**, then download English plus Japanese, Korean, Chinese, and Portuguese and enable **On-Device Mode**. The exact locale pairing will still be checked through `LanguageAvailability`; the settings UI may present the broader language name rather than `pt-BR` or `zh-Hans`. Apple documents this path in [Translate text on Mac](https://support.apple.com/guide/mac-help/translate-text-on-mac-mchldd8b3c15/mac).
+
+A future SwiftUI setup surface can call `TranslationSession.prepareTranslation()` for each required source-to-English pairing. That API presents the system's permission/download UI; a headless installed-only CLI session cannot initiate the missing download.
 
 ## Audio Hijack Integration
 
@@ -648,7 +656,7 @@ The first useful live milestone is complete when:
 
 ## Current Next Step
 
-Bounded finalized-segment streaming and schema-v16 reconciliation are validated directly on the 65-minute MP3 fixture after one-time 16 kHz mono normalization: zero discontinuities, media overflow, surviving overlaps, or seek repairs; 4.36 seconds normalization, 5.40 seconds to first finalized segment, and RTF 0.09666. VAD detected activity in 15 uncovered boundary fragments totaling 3.17 seconds, so meaningful seam recovery remains a golden-fixture evaluation item rather than being classified as silence. `SIGINT` cancellation removes temporary audio cleanly. Exact known-hallucination phrases are shown with a warning while translation and context are suppressed; general music/noise robustness remains an evaluation task. The thin translation bake-off retained `translategemma:4b` and `12b` as provisional latency/resource and quality candidates and verified simultaneous residency—not active inference contention—with WhisperKit on the 192 GiB host. A verbose Argmax CLI rerun confirmed Whisper's translate task still returned Japanese. The next step is the model-neutral Ollama HTTP adapter with the version-2 structured prompt, explicit timeout/keep-alive, typed diagnostics, and source-preserving failure isolation. Apple Translation remains open pending one-time language-asset installation. `bfish doctor --json` provides a machine-readable host preflight report.
+Bounded finalized-segment streaming and schema-v16 reconciliation are validated directly on the 65-minute MP3 fixture after one-time 16 kHz mono normalization: zero discontinuities, media overflow, surviving overlaps, or seek repairs; 4.36 seconds normalization, 5.40 seconds to first finalized segment, and RTF 0.09666. VAD detected activity in 15 uncovered boundary fragments totaling 3.17 seconds, so meaningful seam recovery remains a golden-fixture evaluation item rather than being classified as silence. `SIGINT` cancellation removes temporary audio cleanly. Exact known-hallucination phrases are shown with a warning while translation and context are suppressed; general music/noise robustness remains an evaluation task. The thin translation bake-off retained `translategemma:4b` and `12b` as provisional latency/resource and quality candidates and verified simultaneous residency—not active inference contention—with WhisperKit on the 192 GiB host. Whisper `small` produced English where the large-v3 variant did not, but failed critical Korean and Portuguese details and requires a second decode to preserve source output. The next step is the model-neutral Ollama HTTP adapter with the version-2 structured prompt, explicit timeout/keep-alive, typed diagnostics, and source-preserving failure isolation. Apple Translation remains open pending one-time language-asset installation. `bfish doctor --json` provides a machine-readable host preflight report.
 
 ## Related Projects and Prior Art
 
